@@ -293,6 +293,7 @@ class DeezerApiClient {
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/album/$id/tracks',
+      queryParameters: <String, dynamic>{'limit': 2000},
       cancelToken: cancelToken,
     );
     return _mapList(res.data, DeezerTrack.fromJson);
@@ -351,6 +352,7 @@ class DeezerApiClient {
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/playlist/$id/tracks',
+      queryParameters: <String, dynamic>{'limit': 2000},
       cancelToken: cancelToken,
     );
     return _mapList(res.data, DeezerTrack.fromJson);

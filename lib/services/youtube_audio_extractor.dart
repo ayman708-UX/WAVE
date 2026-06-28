@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/utils/youtube_stream_http.dart';
+
 /// Robust YouTube audio stream resolver.
 ///
 /// Uses the InnerTube API directly (no HTML scraping) and cycles through a
@@ -22,14 +24,13 @@ class YoutubeAudioExtractor {
 
   /// Fallback InnerTube API key. Extracted keys are preferred but this works
   /// when the watch page cannot be fetched.
-  static const String _fallbackApiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+  static const String _fallbackApiKey =
+      'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 
   static const Duration _configTtl = Duration(hours: 3);
   static const Duration _requestTimeout = Duration(seconds: 15);
 
-  static const String _desktopUserAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
+  static const String _desktopUserAgent = YoutubeStreamHttp.desktopUserAgent;
 
   // Search client context. WEB is the most reliable for InnerTube search.
   static final _YtClient _searchClient = _YtClient(
@@ -171,6 +172,8 @@ class YoutubeAudioExtractor {
 
   final Map<String, _CachedVideoId> _videoIdCache = {};
   final Map<String, _CachedStream> _streamCache = {};
+  
+  _YtClient? _lastSuccessfulClient;
 
   // ===========================================================================
   // Public API
@@ -189,10 +192,20 @@ class YoutubeAudioExtractor {
     final queryTitle = (titleVersion != null && titleVersion.isNotEmpty)
         ? '$title $titleVersion'
         : title;
-        
-    final isLive = queryTitle.toLowerCase().contains('live');
-    final suffix = isLive ? 'live' : 'audio';
-    
+
+    final queryLower = queryTitle.toLowerCase();
+    final normVersionLower = titleVersion?.toLowerCase() ?? '';
+    final String suffix;
+    if (queryLower.contains('live') || normVersionLower.contains('live')) {
+      suffix = 'live';
+    } else if (queryLower.contains('remix') || normVersionLower.contains('remix')) {
+      suffix = 'remix';
+    } else if (queryLower.contains('acoustic')) {
+      suffix = 'acoustic';
+    } else {
+      suffix = 'official audio'; // keeps remixes/covers lower in results by default
+    }
+
     final searchQuery = '$queryTitle $artist $suffix'.trim();
     final cacheKey = targetDuration != null
         ? '$searchQuery|${targetDuration.inSeconds}'
@@ -402,24 +415,31 @@ class YoutubeAudioExtractor {
       final duration = _parseDuration(lengthText);
       final videoTitle = _extractTitleText(renderer) ?? '';
 
-      candidates.add(_VideoCandidate(
-        id: videoId,
-        title: videoTitle,
-        duration: duration,
-        isLive: isLive,
-      ));
+      candidates.add(
+        _VideoCandidate(
+          id: videoId,
+          title: videoTitle,
+          duration: duration,
+          isLive: isLive,
+        ),
+      );
     }
 
     if (candidates.isEmpty) return null;
 
-    final normSongTitle = title.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-    final normArtist = artist.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-    final normVersion = titleVersion?.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim() ?? '';
-    
-    final targetIsLive = normSongTitle.contains('live') || normVersion.contains('live');
-    final targetIsRemix = normSongTitle.contains('remix') || normVersion.contains('remix');
-    final targetIsCover = normSongTitle.contains('cover') || normVersion.contains('cover');
-    final targetIsAcoustic = normSongTitle.contains('acoustic') || normVersion.contains('acoustic');
+    final normSongTitle = title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .trim();
+    final normArtist = artist
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s]'), '')
+        .trim();
+    final normVersion =
+        titleVersion?.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim() ??
+        '';
+
+    final targetVariants = _detectVariants('$normSongTitle $normVersion');
 
     _VideoCandidate? bestCandidate;
     double bestScore = -999999.0;
@@ -429,15 +449,21 @@ class YoutubeAudioExtractor {
       final candDuration = candidate.duration;
       if (candDuration != null && candDuration.inSeconds < 30) continue;
 
-      final normCandTitle = candidate.title.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-      
+      final normCandTitle = candidate.title
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^\w\s]'), '')
+          .trim();
+
       double score = 0.0;
 
       // 1. Title match score
       if (normSongTitle.isNotEmpty && normCandTitle.contains(normSongTitle)) {
         score += 100.0;
       } else {
-        final songWords = normSongTitle.split(RegExp(r'\s+')).where((w) => w.length > 2).toList();
+        final songWords = normSongTitle
+            .split(RegExp(r'\s+'))
+            .where((w) => w.length > 2)
+            .toList();
         if (songWords.isNotEmpty) {
           int matchingWords = 0;
           for (final word in songWords) {
@@ -460,60 +486,31 @@ class YoutubeAudioExtractor {
         score += 30.0;
       }
 
-      // 3. Live performance match
-      final candIsLive = normCandTitle.contains('live');
-      if (candIsLive == targetIsLive) {
-        score += 20.0;
-      } else {
-        score -= 50.0;
-      }
-
-      // 4. Remix match
-      final candIsRemix = normCandTitle.contains('remix');
-      if (candIsRemix == targetIsRemix) {
-        score += 20.0;
-      } else {
-        score -= 50.0;
-      }
-
-      // 5. Cover match
-      final candIsCover = normCandTitle.contains('cover');
-      if (candIsCover == targetIsCover) {
-        score += 20.0;
-      } else {
-        score -= 50.0;
-      }
-
-      // 6. Acoustic match
-      final candIsAcoustic = normCandTitle.contains('acoustic');
-      if (candIsAcoustic == targetIsAcoustic) {
-        score += 20.0;
-      } else {
-        score -= 50.0;
-      }
-
-      // 8D / Spatial Audio penalty
-      final targetHas8d = normSongTitle.contains('8d') || normSongTitle.contains('3d') || normSongTitle.contains('16d');
-      final candHas8d = normCandTitle.contains('8d') || normCandTitle.contains('3d') || normCandTitle.contains('16d');
-      if (candHas8d && !targetHas8d) {
-        score -= 500.0; // Heavy penalty for 8D audio if not explicitly requested
-      } else if (!candHas8d && targetHas8d) {
-        score -= 200.0;
-      }
-
-      // 7. Duration difference penalty
-      if (targetDuration != null && candDuration != null) {
-        final diffSecs = (candDuration.inSeconds - targetDuration.inSeconds).abs();
-        if (diffSecs <= 4) {
-          score += 150.0;
-        } else if (diffSecs <= 10) {
-          score += 50.0;
-        } else if (diffSecs <= 20) {
-          score += 10.0;
-        } else if (diffSecs <= 40) {
-          score -= (diffSecs * 3.0);
+      // 3–6 + 8D: Unified variant / modifier matching
+      final candVariants = _detectVariants(normCandTitle);
+      final allVariants = <String>{...targetVariants, ...candVariants};
+      for (final tag in allVariants) {
+        if (targetVariants.contains(tag) == candVariants.contains(tag)) {
+          score += 15.0; // Both sides agree → small bonus
         } else {
-          score -= 500.0 + (diffSecs * 5.0);
+          score -= _variantPenalties[tag] ?? 350.0; // Weighted by how jarring the mismatch is
+        }
+      }
+
+      // 7. Duration match (tiebreaker, never a trump card)
+      if (targetDuration != null && candDuration != null) {
+        final diffSecs =
+            (candDuration.inSeconds - targetDuration.inSeconds).abs();
+        if (diffSecs <= 4) {
+          score += 80.0;        // ↓ from 150 — duration is a hint, not a trump
+        } else if (diffSecs <= 10) {
+          score += 25.0;
+        } else if (diffSecs <= 20) {
+          score += 5.0;
+        } else if (diffSecs <= 40) {
+          score -= diffSecs * 2.0;
+        } else {
+          score -= diffSecs * 5.0; // Proportional only — no flat -500 cliff
         }
       }
 
@@ -526,20 +523,15 @@ class YoutubeAudioExtractor {
     return bestCandidate?.id ?? candidates.first.id;
   }
 
-  List<Map<String, dynamic>> _flattenSearchResults(
-    Map<String, dynamic> data,
-  ) {
+  List<Map<String, dynamic>> _flattenSearchResults(Map<String, dynamic> data) {
     final out = <Map<String, dynamic>>[];
-    final contents = _dig(
-      data,
-      [
-        'contents',
-        'twoColumnSearchResultsRenderer',
-        'primaryContents',
-        'sectionListRenderer',
-        'contents',
-      ],
-    );
+    final contents = _dig(data, [
+      'contents',
+      'twoColumnSearchResultsRenderer',
+      'primaryContents',
+      'sectionListRenderer',
+      'contents',
+    ]);
     if (contents is! List) return out;
 
     for (final section in contents) {
@@ -590,11 +582,7 @@ class YoutubeAudioExtractor {
     if (nums.length == 2) {
       return Duration(minutes: nums[0], seconds: nums[1]);
     } else if (nums.length == 3) {
-      return Duration(
-        hours: nums[0],
-        minutes: nums[1],
-        seconds: nums[2],
-      );
+      return Duration(hours: nums[0], minutes: nums[1], seconds: nums[2]);
     }
     return null;
   }
@@ -603,7 +591,13 @@ class YoutubeAudioExtractor {
     _CachedConfig config,
     String videoId,
   ) async {
-    for (final client in _clients) {
+    final clientsToTry = _clients.toList();
+    if (_lastSuccessfulClient != null) {
+      clientsToTry.remove(_lastSuccessfulClient);
+      clientsToTry.insert(0, _lastSuccessfulClient!);
+    }
+
+    for (final client in clientsToTry) {
       if (client.requiresVisitorData &&
           (config.visitorData == null || config.visitorData!.isEmpty)) {
         continue;
@@ -624,13 +618,26 @@ class YoutubeAudioExtractor {
         final streamingData = _map(player['streamingData']);
         if (streamingData == null) continue;
 
-        final best = _pickBestAudio(streamingData);
-        if (best != null) {
+        final candidates = _audioCandidates(streamingData);
+        for (final best in candidates) {
+          if (best.isExpiredSoon) {
+            _log('${client.key}: skipped expired stream URL');
+            continue;
+          }
+          final playable = await YoutubeStreamHttp.probe(
+            best.url,
+            userAgent: client.userAgent,
+          );
+          if (!playable) {
+            _log('${client.key}: stream probe rejected ${best.label}');
+            continue;
+          }
           _streamCache[videoId] = _CachedStream(
             best.url,
             best.expiresAt,
             client.userAgent,
           );
+          _lastSuccessfulClient = client;
           return (url: best.url, userAgent: client.userAgent);
         }
       } catch (e) {
@@ -640,10 +647,7 @@ class YoutubeAudioExtractor {
     return null;
   }
 
-  Map<String, String> _commonHeaders(
-    _CachedConfig config,
-    _YtClient client,
-  ) {
+  Map<String, String> _commonHeaders(_CachedConfig config, _YtClient client) {
     return {
       'Content-Type': 'application/json',
       'Accept': '*/*',
@@ -669,14 +673,10 @@ class YoutubeAudioExtractor {
 
     final headers = _commonHeaders(config, client);
 
-    final context = <String, dynamic>{
-      'client': client.context,
-    };
+    final context = <String, dynamic>{'client': client.context};
 
     if (client.thirdParty != null) {
-      context['thirdParty'] = {
-        'embedUrl': client.thirdParty!.embedUrl,
-      };
+      context['thirdParty'] = {'embedUrl': client.thirdParty!.embedUrl};
     }
 
     final body = jsonEncode({
@@ -685,9 +685,7 @@ class YoutubeAudioExtractor {
       'racyCheckOk': true,
       'context': context,
       'playbackContext': {
-        'contentPlaybackContext': {
-          'html5Preference': 'HTML5_PREF_WANTS',
-        },
+        'contentPlaybackContext': {'html5Preference': 'HTML5_PREF_WANTS'},
       },
     });
 
@@ -704,11 +702,11 @@ class YoutubeAudioExtractor {
     return <String, dynamic>{};
   }
 
-  _AudioCandidate? _pickBestAudio(Map<String, dynamic> streamingData) {
+  List<_AudioCandidate> _audioCandidates(Map<String, dynamic> streamingData) {
     final adaptive = _listOfMaps(streamingData['adaptiveFormats']);
     final progressive = _listOfMaps(streamingData['formats']);
 
-    _AudioCandidate? best;
+    final candidates = <_AudioCandidate>[];
     // Prefer adaptive audio-only streams (smaller, higher quality per byte).
     for (final f in adaptive) {
       final mime = _str(f, 'mimeType') ?? '';
@@ -717,32 +715,48 @@ class YoutubeAudioExtractor {
       final url = _usableUrl(f);
       if (url == null || url.isEmpty) continue;
 
-      final bitrate =
-          (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
-      final cand = _AudioCandidate(url, bitrate, _expiresAt(url));
-      if (best == null || cand.bitrate > best.bitrate) best = cand;
+      final bitrate = (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0)
+          .toDouble();
+      candidates.add(
+        _AudioCandidate(
+          url,
+          bitrate,
+          _expiresAt(url),
+          audioOnly: true,
+          label: 'itag ${_str(f, 'itag') ?? '?'} $mime',
+        ),
+      );
     }
-    if (best != null) return best;
 
-    // Fallback: progressive (video+audio muxed) — last resort for audio-only.
+    // Fallback: progressive (video+audio muxed) as a last resort.
     for (final f in progressive) {
       final url = _usableUrl(f);
       if (url == null || url.isEmpty) continue;
 
-      final bitrate =
-          (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
-      final cand = _AudioCandidate(url, bitrate, _expiresAt(url));
-      if (best == null || cand.bitrate > best.bitrate) best = cand;
+      final bitrate = (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0)
+          .toDouble();
+      final mime = _str(f, 'mimeType') ?? 'muxed';
+      candidates.add(
+        _AudioCandidate(
+          url,
+          bitrate,
+          _expiresAt(url),
+          audioOnly: false,
+          label: 'itag ${_str(f, 'itag') ?? '?'} $mime',
+        ),
+      );
     }
-    return best;
+    candidates.sort((a, b) {
+      if (a.audioOnly != b.audioOnly) return a.audioOnly ? -1 : 1;
+      return b.bitrate.compareTo(a.bitrate);
+    });
+    return candidates;
   }
 
   /// Extracts a usable URL from a format map.
   ///
-  /// If the format has a plain `url`, returns it. If it has a `signatureCipher`
-  /// that is simple enough to reconstruct (i.e. it already contains a `url` and
-  /// a deciphered signature), reconstructs the URL. Cipher variants that need
-  /// JS execution are ignored because we don't ship a JS interpreter.
+  /// If the format has a plain `url`, returns it. Cipher variants that need JS
+  /// execution are ignored because we don't ship a JS interpreter.
   String? _usableUrl(Map<String, dynamic> format) {
     final plain = _str(format, 'url');
     if (plain != null && plain.isNotEmpty) return plain;
@@ -754,10 +768,11 @@ class YoutubeAudioExtractor {
     final url = params['url'];
     if (url == null || url.isEmpty) return null;
 
-    // If the cipher signature is already deciphered, append it directly.
-    final sig = params['s'];
+    // `s` is a ciphered signature, not a usable signature. Only accept direct
+    // signature fields that are already valid.
+    final sig = params['sig'] ?? params['signature'];
     final sigParam = params['sp'] ?? 'sig';
-    if (sig != null && sig.isNotEmpty && !sig.startsWith('==')) {
+    if (sig != null && sig.isNotEmpty) {
       final separator = url.contains('?') ? '&' : '?';
       return '$url$separator$sigParam=${Uri.encodeQueryComponent(sig)}';
     }
@@ -824,6 +839,63 @@ class YoutubeAudioExtractor {
   static void _log(String msg) {
     if (kDebugMode) debugPrint('[$_tag] $msg');
   }
+
+  /// Returns canonical variant tags for a pre-normalised title string
+  /// (lower-cased, non-[a-z0-9_\s] stripped — same form used for scoring).
+  static Set<String> _detectVariants(String norm) {
+    final tags = <String>{};
+
+    // 8D / Spatial audio (most jarring mismatch)
+    if (RegExp(r'\b(8d|16d|spatial\saudio?|binaural|360|surround)\b')
+        .hasMatch(norm)) tags.add('8d');
+
+    // Slowed / Reverb
+    if (RegExp(r'\b(slowed|reverb)\b').hasMatch(norm)) tags.add('slowed_reverb');
+
+    // Nightcore / Sped-up
+    if (RegExp(r'\b(nightcore|sped[\s]?up)\b').hasMatch(norm)) tags.add('nightcore');
+
+    // Lo-fi
+    if (RegExp(r'\blo[\s]?fi\b').hasMatch(norm)) tags.add('lofi');
+
+    // Instrumental / Karaoke
+    if (RegExp(r'\b(instrumental|karaoke|no\svo[ck]als?|backing\strack)\b')
+        .hasMatch(norm)) tags.add('instrumental');
+
+    // Remix / Mashup / Bootleg
+    if (RegExp(r'\b(remix|mashup|bootleg|flip|vip\smix|reedit)\b')
+        .hasMatch(norm)) tags.add('remix');
+
+    // Live
+    if (RegExp(r'\b(live\b|in\sconcert|live\sat|live\sfrom)\b')
+        .hasMatch(norm)) tags.add('live');
+
+    // Acoustic / Unplugged
+    if (RegExp(r'\b(acoustic|unplugged)\b').hasMatch(norm)) tags.add('acoustic');
+
+    // Cover
+    if (RegExp(r'\bcover\b').hasMatch(norm)) tags.add('cover');
+
+    // Extended mix
+    if (RegExp(r'\b(extended\s(mix|version)|full\sversion)\b')
+        .hasMatch(norm)) tags.add('extended');
+
+    return tags;
+  }
+
+  // Penalty weights — higher = more jarring if wrong
+  static const Map<String, double> _variantPenalties = {
+    '8d':           700.0,
+    'slowed_reverb':600.0,
+    'nightcore':    600.0,
+    'lofi':         500.0,
+    'instrumental': 500.0,
+    'remix':        400.0,
+    'cover':        400.0,
+    'live':         300.0,
+    'acoustic':     300.0,
+    'extended':     200.0,
+  };
 }
 
 // --- private types -----------------------------------------------------------
@@ -886,7 +958,7 @@ class _CachedStream {
   final String userAgent;
 
   _CachedStream(this.url, this.expiresAt, this.userAgent)
-      : cachedAt = DateTime.now();
+    : cachedAt = DateTime.now();
 
   bool get isExpired {
     final exp = expiresAt;
@@ -902,8 +974,22 @@ class _AudioCandidate {
   final String url;
   final double bitrate;
   final DateTime? expiresAt;
+  final bool audioOnly;
+  final String label;
 
-  _AudioCandidate(this.url, this.bitrate, this.expiresAt);
+  _AudioCandidate(
+    this.url,
+    this.bitrate,
+    this.expiresAt, {
+    required this.audioOnly,
+    required this.label,
+  });
+
+  bool get isExpiredSoon {
+    final exp = expiresAt;
+    if (exp == null) return false;
+    return DateTime.now().isAfter(exp.subtract(const Duration(minutes: 2)));
+  }
 }
 
 class _VideoCandidate {

@@ -50,7 +50,7 @@ class QueuePanel extends ConsumerWidget {
             child: Row(
               children: <Widget>[
                 Text(
-                  'QUEUE',
+                  queue.isRelatedMode ? 'RELATED' : 'QUEUE',
                   style: TextStyle(
                     color: theme.onSurface,
                     fontSize: 12,
@@ -59,10 +59,22 @@ class QueuePanel extends ConsumerWidget {
                   ),
                 ),
                 const Spacer(),
-                _SmallAction(
-                  label: 'Save',
-                  icon: PhosphorIconsRegular.bookmarkSimple,
-                  onTap: () {},
+                FilledButton.icon(
+                  onPressed: () => controls.toggleRelatedMode(),
+                  icon: Icon(
+                    queue.isRelatedMode ? PhosphorIconsRegular.queue : PhosphorIconsRegular.radio,
+                    size: 16,
+                  ),
+                  label: Text(
+                    queue.isRelatedMode ? 'Back to Queue' : 'Play Related',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: queue.isRelatedMode ? theme.surface : theme.accent,
+                    foregroundColor: queue.isRelatedMode ? theme.onSurface : theme.background,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 _SmallAction(
@@ -124,7 +136,7 @@ class _QueueList extends ConsumerWidget {
               child: _QueueRow(
                 track: upcoming[i],
                 highlighted: false,
-                onTap: () {},
+                onTap: () => controls.skipToIndex(i),
                 trailing: ReorderableDragStartListener(
                   index: i,
                   child: Padding(
@@ -147,12 +159,15 @@ class _QueueList extends ConsumerWidget {
           ),
         SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _QueueRow(
-              track: queue.history.reversed.toList()[i],
-              highlighted: false,
-              onTap: () {},
-              dim: true,
-            ),
+            (context, i) {
+              final reversedIndex = queue.history.length - 1 - i;
+              return _QueueRow(
+                track: queue.history[reversedIndex],
+                highlighted: false,
+                onTap: () => controls.skipToHistory(reversedIndex),
+                dim: true,
+              );
+            },
             childCount: queue.history.length,
           ),
         ),

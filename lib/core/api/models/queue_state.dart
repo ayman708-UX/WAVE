@@ -14,5 +14,7 @@ abstract class QueueState with _$QueueState {
     @Default(<DeezerTrack>[]) List<DeezerTrack> upcoming,
     DeezerTrack? current,
     @Default(false) bool shuffled,
+    @Default(false) bool isRelatedMode,
+    @Default(<DeezerTrack>[]) List<DeezerTrack> originalUpcoming,
   }) = _QueueState;
 }

@@ -14,7 +14,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$QueueState {
 
- List<DeezerTrack> get history; List<DeezerTrack> get upcoming; DeezerTrack? get current; bool get shuffled;
+ List<DeezerTrack> get history; List<DeezerTrack> get upcoming; DeezerTrack? get current; bool get shuffled; bool get isRelatedMode; List<DeezerTrack> get originalUpcoming;
 /// Create a copy of QueueState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -25,16 +25,16 @@ $QueueStateCopyWith<QueueState> get copyWith => _$QueueStateCopyWithImpl<QueueSt
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is QueueState&&const DeepCollectionEquality().equals(other.history, history)&&const DeepCollectionEquality().equals(other.upcoming, upcoming)&&(identical(other.current, current) || other.current == current)&&(identical(other.shuffled, shuffled) || other.shuffled == shuffled));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is QueueState&&const DeepCollectionEquality().equals(other.history, history)&&const DeepCollectionEquality().equals(other.upcoming, upcoming)&&(identical(other.current, current) || other.current == current)&&(identical(other.shuffled, shuffled) || other.shuffled == shuffled)&&(identical(other.isRelatedMode, isRelatedMode) || other.isRelatedMode == isRelatedMode)&&const DeepCollectionEquality().equals(other.originalUpcoming, originalUpcoming));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(history),const DeepCollectionEquality().hash(upcoming),current,shuffled);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(history),const DeepCollectionEquality().hash(upcoming),current,shuffled,isRelatedMode,const DeepCollectionEquality().hash(originalUpcoming));
 
 @override
 String toString() {
-  return 'QueueState(history: $history, upcoming: $upcoming, current: $current, shuffled: $shuffled)';
+  return 'QueueState(history: $history, upcoming: $upcoming, current: $current, shuffled: $shuffled, isRelatedMode: $isRelatedMode, originalUpcoming: $originalUpcoming)';
 }
 
 
@@ -45,7 +45,7 @@ abstract mixin class $QueueStateCopyWith<$Res>  {
   factory $QueueStateCopyWith(QueueState value, $Res Function(QueueState) _then) = _$QueueStateCopyWithImpl;
 @useResult
 $Res call({
- List<DeezerTrack> history, List<DeezerTrack> upcoming, DeezerTrack? current, bool shuffled
+ List<DeezerTrack> history, List<DeezerTrack> upcoming, DeezerTrack? current, bool shuffled, bool isRelatedMode, List<DeezerTrack> originalUpcoming
 });
 
 
@@ -62,13 +62,15 @@ class _$QueueStateCopyWithImpl<$Res>
 
 /// Create a copy of QueueState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? history = null,Object? upcoming = null,Object? current = freezed,Object? shuffled = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? history = null,Object? upcoming = null,Object? current = freezed,Object? shuffled = null,Object? isRelatedMode = null,Object? originalUpcoming = null,}) {
   return _then(_self.copyWith(
 history: null == history ? _self.history : history // ignore: cast_nullable_to_non_nullable
 as List<DeezerTrack>,upcoming: null == upcoming ? _self.upcoming : upcoming // ignore: cast_nullable_to_non_nullable
 as List<DeezerTrack>,current: freezed == current ? _self.current : current // ignore: cast_nullable_to_non_nullable
 as DeezerTrack?,shuffled: null == shuffled ? _self.shuffled : shuffled // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,isRelatedMode: null == isRelatedMode ? _self.isRelatedMode : isRelatedMode // ignore: cast_nullable_to_non_nullable
+as bool,originalUpcoming: null == originalUpcoming ? _self.originalUpcoming : originalUpcoming // ignore: cast_nullable_to_non_nullable
+as List<DeezerTrack>,
   ));
 }
 /// Create a copy of QueueState
@@ -165,10 +167,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( List<DeezerTrack> history,  List<DeezerTrack> upcoming,  DeezerTrack? current,  bool shuffled)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( List<DeezerTrack> history,  List<DeezerTrack> upcoming,  DeezerTrack? current,  bool shuffled,  bool isRelatedMode,  List<DeezerTrack> originalUpcoming)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _QueueState() when $default != null:
-return $default(_that.history,_that.upcoming,_that.current,_that.shuffled);case _:
+return $default(_that.history,_that.upcoming,_that.current,_that.shuffled,_that.isRelatedMode,_that.originalUpcoming);case _:
   return orElse();
 
 }
@@ -186,10 +188,10 @@ return $default(_that.history,_that.upcoming,_that.current,_that.shuffled);case 
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( List<DeezerTrack> history,  List<DeezerTrack> upcoming,  DeezerTrack? current,  bool shuffled)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( List<DeezerTrack> history,  List<DeezerTrack> upcoming,  DeezerTrack? current,  bool shuffled,  bool isRelatedMode,  List<DeezerTrack> originalUpcoming)  $default,) {final _that = this;
 switch (_that) {
 case _QueueState():
-return $default(_that.history,_that.upcoming,_that.current,_that.shuffled);case _:
+return $default(_that.history,_that.upcoming,_that.current,_that.shuffled,_that.isRelatedMode,_that.originalUpcoming);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -206,10 +208,10 @@ return $default(_that.history,_that.upcoming,_that.current,_that.shuffled);case 
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( List<DeezerTrack> history,  List<DeezerTrack> upcoming,  DeezerTrack? current,  bool shuffled)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( List<DeezerTrack> history,  List<DeezerTrack> upcoming,  DeezerTrack? current,  bool shuffled,  bool isRelatedMode,  List<DeezerTrack> originalUpcoming)?  $default,) {final _that = this;
 switch (_that) {
 case _QueueState() when $default != null:
-return $default(_that.history,_that.upcoming,_that.current,_that.shuffled);case _:
+return $default(_that.history,_that.upcoming,_that.current,_that.shuffled,_that.isRelatedMode,_that.originalUpcoming);case _:
   return null;
 
 }
@@ -221,7 +223,7 @@ return $default(_that.history,_that.upcoming,_that.current,_that.shuffled);case 
 
 
 class _QueueState implements QueueState {
-  const _QueueState({final  List<DeezerTrack> history = const <DeezerTrack>[], final  List<DeezerTrack> upcoming = const <DeezerTrack>[], this.current, this.shuffled = false}): _history = history,_upcoming = upcoming;
+  const _QueueState({final  List<DeezerTrack> history = const <DeezerTrack>[], final  List<DeezerTrack> upcoming = const <DeezerTrack>[], this.current, this.shuffled = false, this.isRelatedMode = false, final  List<DeezerTrack> originalUpcoming = const <DeezerTrack>[]}): _history = history,_upcoming = upcoming,_originalUpcoming = originalUpcoming;
   
 
  final  List<DeezerTrack> _history;
@@ -240,6 +242,14 @@ class _QueueState implements QueueState {
 
 @override final  DeezerTrack? current;
 @override@JsonKey() final  bool shuffled;
+@override@JsonKey() final  bool isRelatedMode;
+ final  List<DeezerTrack> _originalUpcoming;
+@override@JsonKey() List<DeezerTrack> get originalUpcoming {
+  if (_originalUpcoming is EqualUnmodifiableListView) return _originalUpcoming;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_originalUpcoming);
+}
+
 
 /// Create a copy of QueueState
 /// with the given fields replaced by the non-null parameter values.
@@ -251,16 +261,16 @@ _$QueueStateCopyWith<_QueueState> get copyWith => __$QueueStateCopyWithImpl<_Que
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _QueueState&&const DeepCollectionEquality().equals(other._history, _history)&&const DeepCollectionEquality().equals(other._upcoming, _upcoming)&&(identical(other.current, current) || other.current == current)&&(identical(other.shuffled, shuffled) || other.shuffled == shuffled));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _QueueState&&const DeepCollectionEquality().equals(other._history, _history)&&const DeepCollectionEquality().equals(other._upcoming, _upcoming)&&(identical(other.current, current) || other.current == current)&&(identical(other.shuffled, shuffled) || other.shuffled == shuffled)&&(identical(other.isRelatedMode, isRelatedMode) || other.isRelatedMode == isRelatedMode)&&const DeepCollectionEquality().equals(other._originalUpcoming, _originalUpcoming));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_history),const DeepCollectionEquality().hash(_upcoming),current,shuffled);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_history),const DeepCollectionEquality().hash(_upcoming),current,shuffled,isRelatedMode,const DeepCollectionEquality().hash(_originalUpcoming));
 
 @override
 String toString() {
-  return 'QueueState(history: $history, upcoming: $upcoming, current: $current, shuffled: $shuffled)';
+  return 'QueueState(history: $history, upcoming: $upcoming, current: $current, shuffled: $shuffled, isRelatedMode: $isRelatedMode, originalUpcoming: $originalUpcoming)';
 }
 
 
@@ -271,7 +281,7 @@ abstract mixin class _$QueueStateCopyWith<$Res> implements $QueueStateCopyWith<$
   factory _$QueueStateCopyWith(_QueueState value, $Res Function(_QueueState) _then) = __$QueueStateCopyWithImpl;
 @override @useResult
 $Res call({
- List<DeezerTrack> history, List<DeezerTrack> upcoming, DeezerTrack? current, bool shuffled
+ List<DeezerTrack> history, List<DeezerTrack> upcoming, DeezerTrack? current, bool shuffled, bool isRelatedMode, List<DeezerTrack> originalUpcoming
 });
 
 
@@ -288,13 +298,15 @@ class __$QueueStateCopyWithImpl<$Res>
 
 /// Create a copy of QueueState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? history = null,Object? upcoming = null,Object? current = freezed,Object? shuffled = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? history = null,Object? upcoming = null,Object? current = freezed,Object? shuffled = null,Object? isRelatedMode = null,Object? originalUpcoming = null,}) {
   return _then(_QueueState(
 history: null == history ? _self._history : history // ignore: cast_nullable_to_non_nullable
 as List<DeezerTrack>,upcoming: null == upcoming ? _self._upcoming : upcoming // ignore: cast_nullable_to_non_nullable
 as List<DeezerTrack>,current: freezed == current ? _self.current : current // ignore: cast_nullable_to_non_nullable
 as DeezerTrack?,shuffled: null == shuffled ? _self.shuffled : shuffled // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,isRelatedMode: null == isRelatedMode ? _self.isRelatedMode : isRelatedMode // ignore: cast_nullable_to_non_nullable
+as bool,originalUpcoming: null == originalUpcoming ? _self._originalUpcoming : originalUpcoming // ignore: cast_nullable_to_non_nullable
+as List<DeezerTrack>,
   ));
 }
 

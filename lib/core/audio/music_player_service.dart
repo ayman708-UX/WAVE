@@ -29,6 +29,8 @@ abstract class MusicPlayerService {
   Future<void> seek(Duration position);
   Future<void> skipNext();
   Future<void> skipPrevious();
+  Future<void> skipToIndex(int indexInUpcoming);
+  Future<void> skipToHistory(int indexInHistory);
   Future<void> setShuffle(bool value);
   Future<void> setRepeat(RepeatMode mode);
   Future<void> setVolume(double volume);
@@ -47,6 +49,7 @@ abstract class MusicPlayerService {
   Future<void> removeFromQueue(int indexInUpcoming);
   Future<void> reorderQueue(int oldIndex, int newIndex);
   Future<void> clearQueue();
+  Future<void> toggleRelatedMode();
 
   // ---------------------------------------------------------------------------
   // Misc

@@ -9,6 +9,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/api/models/player_state.dart' hide RepeatMode;
 import '../../core/api/models/player_state.dart' as ps show RepeatMode;
+import '../../core/api/models/queue_state.dart';
 import '../../core/audio/player_providers.dart';
 import '../../core/audio/sleep_timer.dart';
 import '../../core/router/app_router.dart';
@@ -41,6 +42,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Widget build(BuildContext context) {
     final theme = AppThemeScope.of(context);
     final player = ref.watch(playerSnapshotProvider);
+    final queue = ref.watch(queueSnapshotProvider);
     final track = player.currentTrack;
     if (track == null) {
       return _EmptyShell(theme: theme);
@@ -62,7 +64,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             ),
             Column(
               children: <Widget>[
-                _buildTopBar(context, theme),
+                _buildTopBar(context, theme, queue),
                 Expanded(
                   child: _showLyrics
                       ? LyricsView(track: track)
@@ -75,7 +77,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           ),
                         ),
                 ),
-                _buildControlsSection(context, theme, track, player),
+                _buildControlsSection(context, theme, track, player, queue),
               ],
             ),
           ],
@@ -123,7 +125,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     }
   }
 
-  Widget _buildTopBar(BuildContext context, AppTheme theme) {
+  Widget _buildTopBar(BuildContext context, AppTheme theme, QueueState queue) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
       child: Row(
@@ -146,7 +148,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Queue',
+                queue.isRelatedMode ? 'Related' : 'Queue',
                 style: TextStyle(
                   color: theme.onSurface,
                   fontSize: 12,
@@ -259,6 +261,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     AppTheme theme,
     DeezerTrack track,
     PlayerState player,
+    QueueState queue,
   ) {
     final liked = ref.watch(likedTracksProvider).any((t) => t.id == track.id);
     final timer = ref.watch(sleepTimerProvider);
@@ -421,8 +424,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
               _BottomTextButton(
-                icon: PhosphorIconsRegular.queue,
-                label: 'QUEUE',
+                icon: queue.isRelatedMode ? PhosphorIconsRegular.radio : PhosphorIconsRegular.queue,
+                label: queue.isRelatedMode ? 'RELATED' : 'QUEUE',
                 onTap: () => showWaveSheet<void>(
                   context: context,
                   builder: (_) => SizedBox(

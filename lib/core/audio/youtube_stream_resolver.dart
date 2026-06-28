@@ -3,6 +3,7 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../../services/youtube_audio_extractor.dart';
 import '../api/models/deezer_track.dart';
 import '../utils/app_logger.dart';
+import '../utils/youtube_stream_http.dart';
 
 /// Resolves a [DeezerTrack] to a directly-playable audio stream URL.
 ///
@@ -25,19 +26,25 @@ class YoutubeStreamResolver {
 
   /// Returns a direct stream URL and User-Agent for [track], or `null` if no
   /// backend could resolve it.
-  Future<({String url, String? userAgent})?> resolveUrl(DeezerTrack track) async {
+  Future<({String url, String? userAgent})?> resolveUrl(
+    DeezerTrack track,
+  ) async {
     // 1. Primary fast path: custom InnerTube extractor.
     try {
       final videoId = await YoutubeAudioExtractor.instance.searchVideoId(
         track.title,
         track.artist?.name ?? '',
-        targetDuration: track.duration != null ? Duration(seconds: track.duration!) : null,
+        targetDuration: track.duration != null
+            ? Duration(seconds: track.duration!)
+            : null,
         titleVersion: track.titleVersion,
       );
       if (videoId != null) {
         final res = await YoutubeAudioExtractor.instance.getAudioUrl(videoId);
         if (res != null) {
-          appLogger.i('Resolved audio URL via fast extractor for ${track.title}');
+          appLogger.i(
+            'Resolved audio URL via fast extractor for ${track.title}',
+          );
           return (url: res.url, userAgent: res.userAgent);
         }
       }
@@ -49,7 +56,8 @@ class YoutubeStreamResolver {
     try {
       final info = await resolveStreamInfo(track);
       if (info != null) {
-        return (url: info.url.toString(), userAgent: null);
+        final url = info.url.toString();
+        return (url: url, userAgent: YoutubeStreamHttp.userAgentForUrl(url));
       }
     } catch (e) {
       appLogger.w('youtube_explode_dart fallback failed: $e');
@@ -98,30 +106,53 @@ class YoutubeStreamResolver {
           final title = track.title;
           final artist = track.artist?.name ?? '';
           final titleVersion = track.titleVersion ?? '';
-          final targetDuration = track.duration != null ? Duration(seconds: track.duration!) : null;
+          final targetDuration = track.duration != null
+              ? Duration(seconds: track.duration!)
+              : null;
 
-          final normSongTitle = title.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-          final normArtist = artist.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-          final normVersion = titleVersion.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-          
-          final targetIsLive = normSongTitle.contains('live') || normVersion.contains('live');
-          final targetIsRemix = normSongTitle.contains('remix') || normVersion.contains('remix');
-          final targetIsCover = normSongTitle.contains('cover') || normVersion.contains('cover');
-          final targetIsAcoustic = normSongTitle.contains('acoustic') || normVersion.contains('acoustic');
+          final normSongTitle = title
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^\w\s]'), '')
+              .trim();
+          final normArtist = artist
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^\w\s]'), '')
+              .trim();
+          final normVersion = titleVersion
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^\w\s]'), '')
+              .trim();
+
+          final targetIsLive =
+              normSongTitle.contains('live') || normVersion.contains('live');
+          final targetIsRemix =
+              normSongTitle.contains('remix') || normVersion.contains('remix');
+          final targetIsCover =
+              normSongTitle.contains('cover') || normVersion.contains('cover');
+          final targetIsAcoustic =
+              normSongTitle.contains('acoustic') ||
+              normVersion.contains('acoustic');
 
           double bestScore = -999999.0;
 
           for (final candidate in candidates) {
             final candDuration = candidate.duration;
-            final normCandTitle = candidate.title.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-            
+            final normCandTitle = candidate.title
+                .toLowerCase()
+                .replaceAll(RegExp(r'[^\w\s]'), '')
+                .trim();
+
             double score = 0.0;
 
             // 1. Title match score
-            if (normSongTitle.isNotEmpty && normCandTitle.contains(normSongTitle)) {
+            if (normSongTitle.isNotEmpty &&
+                normCandTitle.contains(normSongTitle)) {
               score += 100.0;
             } else {
-              final songWords = normSongTitle.split(RegExp(r'\s+')).where((w) => w.length > 2).toList();
+              final songWords = normSongTitle
+                  .split(RegExp(r'\s+'))
+                  .where((w) => w.length > 2)
+                  .toList();
               if (songWords.isNotEmpty) {
                 int matchingWords = 0;
                 for (final word in songWords) {
@@ -178,7 +209,8 @@ class YoutubeStreamResolver {
 
             // 7. Duration difference penalty
             if (targetDuration != null && candDuration != null) {
-              final diffSecs = (candDuration.inSeconds - targetDuration.inSeconds).abs();
+              final diffSecs =
+                  (candDuration.inSeconds - targetDuration.inSeconds).abs();
               if (diffSecs <= 4) {
                 score += 150.0;
               } else if (diffSecs <= 10) {
@@ -207,7 +239,7 @@ class YoutubeStreamResolver {
         vid,
         ytClients: clients,
       );
-      return manifest.audioOnly.withHighestBitrate();
+      return _pickPlayableAudioOnly(manifest.audioOnly.toList());
     } catch (e) {
       appLogger.e('yt resolveStreamInfo failed for "$query": $e');
       // Clear cache so we don't permanently break this song.
@@ -221,11 +253,49 @@ class YoutubeStreamResolver {
     final version = track.titleVersion ?? '';
     final title = track.title;
     final queryTitle = version.isNotEmpty ? '$title $version' : title;
-    
+
     final isLive = queryTitle.toLowerCase().contains('live');
     final suffix = isLive ? 'live' : 'audio';
-    
+
     return '$queryTitle $artist $suffix'.trim();
+  }
+
+  Future<AudioOnlyStreamInfo?> _pickPlayableAudioOnly(
+    List<AudioOnlyStreamInfo> streams,
+  ) async {
+    streams.sort((a, b) => b.bitrate.compareTo(a.bitrate));
+
+    for (final stream in streams) {
+      final url = stream.url.toString();
+      if (_isExpiredSoon(url)) {
+        appLogger.w('yt: skipped expired stream URL for itag ${stream.tag}');
+        continue;
+      }
+
+      final playable = await YoutubeStreamHttp.probe(
+        url,
+        userAgent: YoutubeStreamHttp.userAgentForUrl(url),
+      );
+      if (playable) return stream;
+
+      appLogger.w('yt: stream probe rejected itag ${stream.tag}');
+    }
+
+    return null;
+  }
+
+  bool _isExpiredSoon(String url) {
+    try {
+      final expire = Uri.parse(url).queryParameters['expire'];
+      final secs = int.tryParse(expire ?? '');
+      if (secs == null) return false;
+      final expiresAt = DateTime.fromMillisecondsSinceEpoch(secs * 1000);
+      return DateTime.now().isAfter(
+        expiresAt.subtract(const Duration(minutes: 2)),
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   void dispose() {

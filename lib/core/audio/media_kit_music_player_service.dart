@@ -6,11 +6,14 @@ import 'package:audio_service/audio_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
+import '../api/deezer_api_client.dart';
+import '../api/lastfm_api_client.dart';
 import '../api/models/deezer_track.dart';
 import '../api/models/player_state.dart';
 import '../api/models/queue_state.dart';
-import '../utils/app_logger.dart';
 import '../storage/hive_boxes.dart';
+import '../utils/app_logger.dart';
+import '../utils/youtube_stream_http.dart';
 import 'local_proxy.dart';
 import 'music_player_service.dart';
 import 'youtube_stream_resolver.dart';
@@ -21,7 +24,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     with SeekHandler
     implements MusicPlayerService {
   MediaKitMusicPlayerService({YoutubeStreamResolver? resolver})
-      : _resolver = resolver ?? YoutubeStreamResolver() {
+    : _resolver = resolver ?? YoutubeStreamResolver() {
     _initPlayer(_playerA);
     _initPlayer(_playerB);
     _loadInitialSettings();
@@ -70,7 +73,10 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
           _state = _state.copyWith(crossfadeSeconds: secs);
           final bandsRaw = json['equalizerBandsDb'];
           if (bandsRaw is List) {
-            final List<double> bands = bandsRaw.whereType<num>().map((n) => n.toDouble()).toList();
+            final List<double> bands = bandsRaw
+                .whereType<num>()
+                .map((n) => n.toDouble())
+                .toList();
             if (bands.length == 5) {
               _equalizerBandsDb = bands;
             }
@@ -81,7 +87,10 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         _state = _state.copyWith(crossfadeSeconds: secs);
         final bandsRaw = raw['equalizerBandsDb'];
         if (bandsRaw is List) {
-          final List<double> bands = bandsRaw.whereType<num>().map((n) => n.toDouble()).toList();
+          final List<double> bands = bandsRaw
+              .whereType<num>()
+              .map((n) => n.toDouble())
+              .toList();
           if (bands.length == 5) {
             _equalizerBandsDb = bands;
           }
@@ -95,38 +104,15 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     }
   }
 
-  Map<String, String> _buildStreamHeaders({String? userAgent}) {
-    final headers = <String, String>{
-      'Accept': '*/*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Origin': 'https://www.youtube.com',
-      'Referer': 'https://www.youtube.com/',
-      'sec-fetch-dest': 'empty',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-site': 'cross-site',
-    };
-
-    // If we got a specific User-Agent from the extractor, WE MUST USE IT.
-    // Otherwise YouTube CDN returns 403 Forbidden for some streams.
-    if (userAgent != null && userAgent.isNotEmpty) {
-      headers['User-Agent'] = userAgent;
-    } else {
-      headers['User-Agent'] =
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
-    }
-    return headers;
-  }
-
   Future<void> _applyEqualizerToPlayer(mk.Player player) async {
     final isFlat = _equalizerBandsDb.every((db) => db == 0.0);
     final filter = isFlat
         ? ''
         : 'lavfi=[equalizer=f=60:t=q:w=1:g=${_equalizerBandsDb[0]},'
-            'equalizer=f=230:t=q:w=1:g=${_equalizerBandsDb[1]},'
-            'equalizer=f=910:t=q:w=1:g=${_equalizerBandsDb[2]},'
-            'equalizer=f=4000:t=q:w=1:g=${_equalizerBandsDb[3]},'
-            'equalizer=f=14000:t=q:w=1:g=${_equalizerBandsDb[4]}]';
+              'equalizer=f=230:t=q:w=1:g=${_equalizerBandsDb[1]},'
+              'equalizer=f=910:t=q:w=1:g=${_equalizerBandsDb[2]},'
+              'equalizer=f=4000:t=q:w=1:g=${_equalizerBandsDb[3]},'
+              'equalizer=f=14000:t=q:w=1:g=${_equalizerBandsDb[4]}]';
     try {
       if (player.platform is mk.NativePlayer) {
         await (player.platform as mk.NativePlayer).setProperty('af', filter);
@@ -159,48 +145,53 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   void _syncAudioService() {
     final isPlaying = _state.status == PlaybackStatus.playing;
-    final isBuffering = _state.status == PlaybackStatus.buffering ||
+    final isBuffering =
+        _state.status == PlaybackStatus.buffering ||
         _state.status == PlaybackStatus.loading;
 
-    playbackState.add(playbackState.value.copyWith(
-      controls: [
-        MediaControl.skipToPrevious,
-        if (isPlaying) MediaControl.pause else MediaControl.play,
-        MediaControl.skipToNext,
-      ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-      },
-      androidCompactActionIndices: const [0, 1, 2],
-      processingState: isBuffering
-          ? AudioProcessingState.buffering
-          : (_state.status == PlaybackStatus.idle
-              ? AudioProcessingState.idle
-              : AudioProcessingState.ready),
-      playing: isPlaying,
-      updatePosition: _state.position,
-      bufferedPosition: _state.buffered,
-      speed: 1.0,
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (isPlaying) MediaControl.pause else MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+        },
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: isBuffering
+            ? AudioProcessingState.buffering
+            : (_state.status == PlaybackStatus.idle
+                  ? AudioProcessingState.idle
+                  : AudioProcessingState.ready),
+        playing: isPlaying,
+        updatePosition: _state.position,
+        bufferedPosition: _state.buffered,
+        speed: 1.0,
+      ),
+    );
 
     if (_state.currentTrack != null) {
       final t = _state.currentTrack!;
       final oldMediaItem = mediaItem.value;
       if (oldMediaItem?.id != t.id.toString()) {
-        mediaItem.add(MediaItem(
-          id: t.id.toString(),
-          title: t.title,
-          artist: t.artist?.name,
-          album: t.album?.title,
-          duration: t.duration != null
-              ? Duration(seconds: t.duration!)
-              : _state.duration,
-          artUri: t.album?.coverMedium != null
-              ? Uri.parse(t.album!.coverMedium!)
-              : null,
-        ));
+        mediaItem.add(
+          MediaItem(
+            id: t.id.toString(),
+            title: t.title,
+            artist: t.artist?.name,
+            album: t.album?.title,
+            duration: t.duration != null
+                ? Duration(seconds: t.duration!)
+                : _state.duration,
+            artUri: t.album?.coverMedium != null
+                ? Uri.parse(t.album!.coverMedium!)
+                : null,
+          ),
+        );
       }
     }
   }
@@ -215,9 +206,11 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   void _onPlayingChanged(mk.Player p, bool playing) {
     if (p != _activePlayer || _loading) return;
-    _emitPlayer(_state.copyWith(
-      status: playing ? PlaybackStatus.playing : PlaybackStatus.paused,
-    ));
+    _emitPlayer(
+      _state.copyWith(
+        status: playing ? PlaybackStatus.playing : PlaybackStatus.paused,
+      ),
+    );
   }
 
   void _onBufferingChanged(mk.Player p, bool buffering) {
@@ -232,7 +225,49 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   void _onCompleted(mk.Player p, bool completed) {
     if (p != _activePlayer) return;
     if (completed && !_isCrossfading && !_autoCrossfadeTriggered) {
+      if (_queue.isRelatedMode && _queue.upcoming.length <= 1) {
+        _fetchMoreRelatedTracks();
+      }
       unawaited(skipNext());
+    }
+  }
+
+  Future<void> _fetchMoreRelatedTracks() async {
+    if (_queue.upcoming.isEmpty && _queue.current != null) {
+      // Current track is ending, fetch related for it
+      final track = _queue.current!;
+      final artistName = track.artist?.name ?? '';
+      final trackName = track.title;
+      if (artistName.isEmpty) return;
+
+      try {
+        final similar = await LastfmApiClient().getSimilarTracks(trackName, artistName);
+        if (similar.isNotEmpty) {
+          final deezerApi = DeezerApiClient();
+          final newTracks = <DeezerTrack>[];
+          for (final t in similar) {
+            final tName = t['name'] ?? '';
+            final tArtist = t['artist'] ?? '';
+            if (tName.isEmpty || tArtist.isEmpty) continue;
+            try {
+              final res = await deezerApi.searchTracks('artist:"$tArtist" track:"$tName"');
+              if (res.isNotEmpty) {
+                // Avoid adding tracks already in history or upcoming
+                final exists = [..._queue.history, ..._queue.upcoming, _queue.current].any((e) => e?.id == res.first.id);
+                if (!exists) {
+                  newTracks.add(res.first);
+                }
+              }
+            } catch (_) {}
+            if (newTracks.length >= 10) break;
+          }
+          if (newTracks.isNotEmpty) {
+             _emitQueue(_queue.copyWith(upcoming: [..._queue.upcoming, ...newTracks]));
+          }
+        }
+      } catch (e) {
+        appLogger.e('Failed to fetch more related tracks: $e');
+      }
     }
   }
 
@@ -242,7 +277,10 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     _emitPlayer(_state.copyWith(position: pos));
 
     // Check for automatic crossfade
-    if (!_isCrossfading && !_autoCrossfadeTriggered && _state.duration > Duration.zero && _state.crossfadeSeconds > 0) {
+    if (!_isCrossfading &&
+        !_autoCrossfadeTriggered &&
+        _state.duration > Duration.zero &&
+        _state.crossfadeSeconds > 0) {
       final remaining = _state.duration - pos;
       if (remaining <= Duration(seconds: _state.crossfadeSeconds)) {
         if (_queue.upcoming.isNotEmpty) {
@@ -261,11 +299,13 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       ..._queue.history,
       if (_queue.current != null) _queue.current!,
     ];
-    _emitQueue(_queue.copyWith(
-      history: newHistory,
-      current: next,
-      upcoming: newUpcoming,
-    ));
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: next,
+        upcoming: newUpcoming,
+      ),
+    );
     await _startPlayback(next, autoCrossfade: true);
   }
 
@@ -284,10 +324,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     if (p != _activePlayer) return;
     if (_loading || _isCrossfading) return;
     appLogger.e('media_kit error: $e');
-    _emitPlayer(_state.copyWith(
-      status: PlaybackStatus.error,
-      errorMessage: e,
-    ));
+    _emitPlayer(_state.copyWith(status: PlaybackStatus.error, errorMessage: e));
   }
 
   // ---------------------------------------------------------------------------
@@ -305,24 +342,28 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   /// Start playback with optional crossfade.
   /// Only called from auto-crossfade and skip next/prev (manual short fade).
-  Future<void> _startPlayback(DeezerTrack track, {required bool autoCrossfade}) async {
+  Future<void> _startPlayback(
+    DeezerTrack track, {
+    required bool autoCrossfade,
+  }) async {
     _autoCrossfadeTriggered = false;
 
     final int fadeSecs = _state.crossfadeSeconds;
     final crossfadeDuration = autoCrossfade
-      ? Duration(seconds: fadeSecs)
-      : const Duration(milliseconds: 500);
+        ? Duration(seconds: fadeSecs)
+        : const Duration(milliseconds: 500);
 
-    final bool canCrossfade = _activePlayer.state.playing && crossfadeDuration > Duration.zero;
+    final bool canCrossfade =
+        _activePlayer.state.playing && crossfadeDuration > Duration.zero;
 
     if (!canCrossfade) {
-        _crossfadeTimer?.cancel();
-        _isCrossfading = false;
-        await _activePlayer.stop();
-        await _inactivePlayer.stop();
-        
-        await _loadAndPlay(track, _activePlayer);
-        return;
+      _crossfadeTimer?.cancel();
+      _isCrossfading = false;
+      await _activePlayer.stop();
+      await _inactivePlayer.stop();
+
+      await _loadAndPlay(track, _activePlayer);
+      return;
     }
 
     // Cancel any in-progress crossfade cleanly
@@ -342,7 +383,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
     // Start new track at volume 0
     await fadingInPlayer.setVolume(0.0);
-    
+
     // Begin loading
     _loading = true;
     _emitPlayer(
@@ -360,7 +401,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     try {
       String? url;
       String? userAgent;
-      
+
       final localPath = _getDownloadedAudioPath(track.id);
       if (localPath == null) {
         final res = await _resolver.resolveUrl(track);
@@ -370,30 +411,31 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         url = 'file://$localPath'; // Wrap local path in file:// URI
       }
       if (url == null) throw Exception('No audio source found');
-      
+
       // Route YouTube urls through our local proxy
-      if (url.contains('googlevideo.com') && LocalProxy.isRunning) {
+      if (YoutubeStreamHttp.isYoutubeCdnUrl(url) && LocalProxy.isRunning) {
         final encodedUrl = Uri.encodeComponent(url);
         final encodedUa = Uri.encodeComponent(userAgent ?? '');
-        url = 'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
+        url =
+            'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
       await fadingInPlayer.open(mk.Media(url), play: true);
       await _applyEqualizerToPlayer(fadingInPlayer);
-      
+
       _loading = false;
       _emitPlayer(_state.copyWith(status: PlaybackStatus.playing));
       _preloadNext();
     } catch (e, st) {
       _loading = false;
       _isCrossfading = false;
-      
+
       // Revert the active player swap so the currently playing song isn't interrupted
       _activePlayer = fadingOutPlayer;
       _inactivePlayer = fadingInPlayer;
 
       appLogger.e('media_kit load failed', error: e, stackTrace: st);
-      
+
       // Attempt to auto-skip to the next song instead of just failing silently and stopping the queue
       unawaited(skipNext());
       return;
@@ -431,7 +473,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
       if (currentStep >= steps) {
         timer.cancel();
-        try { await fadingOutPlayer.stop(); } catch (_) {}
+        try {
+          await fadingOutPlayer.stop();
+        } catch (_) {}
         _isCrossfading = false;
       }
     });
@@ -456,7 +500,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     try {
       String? url;
       String? userAgent;
-      
+
       final localPath = _getDownloadedAudioPath(track.id);
       if (localPath == null) {
         final res = await _resolver.resolveUrl(track);
@@ -477,10 +521,11 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       }
 
       // Route YouTube urls through our local proxy
-      if (url.contains('googlevideo.com') && LocalProxy.isRunning) {
+      if (YoutubeStreamHttp.isYoutubeCdnUrl(url) && LocalProxy.isRunning) {
         final encodedUrl = Uri.encodeComponent(url);
         final encodedUa = Uri.encodeComponent(userAgent ?? '');
-        url = 'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
+        url =
+            'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
       await player.open(mk.Media(url));
@@ -522,10 +567,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     _isCrossfading = false;
     await _activePlayer.stop();
     await _inactivePlayer.stop();
-    _emitPlayer(_state.copyWith(
-      status: PlaybackStatus.idle,
-      position: Duration.zero,
-    ));
+    _emitPlayer(
+      _state.copyWith(status: PlaybackStatus.idle, position: Duration.zero),
+    );
     await super.stop();
   }
 
@@ -553,12 +597,56 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       ..._queue.history,
       if (_queue.current != null) _queue.current!,
     ];
-    _emitQueue(_queue.copyWith(
-      history: newHistory,
-      current: next,
-      upcoming: newUpcoming,
-    ));
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: next,
+        upcoming: newUpcoming,
+      ),
+    );
     await _startPlayback(next, autoCrossfade: false);
+  }
+
+  @override
+  Future<void> skipToIndex(int indexInUpcoming) async {
+    if (indexInUpcoming < 0 || indexInUpcoming >= _queue.upcoming.length) return;
+    final next = _queue.upcoming[indexInUpcoming];
+    final newUpcoming = _queue.upcoming.sublist(indexInUpcoming + 1);
+    final skippedTracks = _queue.upcoming.sublist(0, indexInUpcoming);
+    final newHistory = <DeezerTrack>[
+      ..._queue.history,
+      if (_queue.current != null) _queue.current!,
+      ...skippedTracks,
+    ];
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: next,
+        upcoming: newUpcoming,
+      ),
+    );
+    await _startPlayback(next, autoCrossfade: false);
+  }
+
+  @override
+  Future<void> skipToHistory(int indexInHistory) async {
+    if (indexInHistory < 0 || indexInHistory >= _queue.history.length) return;
+    final prev = _queue.history[indexInHistory];
+    final newHistory = _queue.history.sublist(0, indexInHistory);
+    final skippedHistory = _queue.history.sublist(indexInHistory + 1);
+    final newUpcoming = <DeezerTrack>[
+      ...skippedHistory,
+      if (_queue.current != null) _queue.current!,
+      ..._queue.upcoming,
+    ];
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: prev,
+        upcoming: newUpcoming,
+      ),
+    );
+    await _startPlayback(prev, autoCrossfade: false);
   }
 
   @override
@@ -574,11 +662,13 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       if (_queue.current != null) _queue.current!,
       ..._queue.upcoming,
     ];
-    _emitQueue(_queue.copyWith(
-      history: newHistory,
-      current: prev,
-      upcoming: newUpcoming,
-    ));
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: prev,
+        upcoming: newUpcoming,
+      ),
+    );
     await _startPlayback(prev, autoCrossfade: false);
   }
 
@@ -623,12 +713,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   // Queue management ---------------------------------------------------------
 
   @override
-  Future<void> playTracks(
-    List<DeezerTrack> tracks, {
-    int? startIndex,
-  }) async {
+  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex}) async {
     if (tracks.isEmpty) return;
-    
+
     int i;
     if (startIndex != null) {
       i = startIndex.clamp(0, tracks.length - 1);
@@ -639,37 +726,41 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         i = 0;
       }
     }
-    
+
     final current = tracks[i];
 
     var upcoming = List<DeezerTrack>.from(tracks);
-    upcoming.removeAt(i); 
-    
+    upcoming.removeAt(i);
+
     if (_state.shuffle && upcoming.isNotEmpty) {
       upcoming.shuffle(Random());
     } else if (!_state.shuffle) {
       upcoming = List<DeezerTrack>.from(tracks.sublist(i + 1));
     }
 
-    _emitQueue(QueueState(
-      history: const <DeezerTrack>[],
-      current: current,
-      upcoming: upcoming,
-      shuffled: _state.shuffle,
-    ));
+    _emitQueue(
+      QueueState(
+        history: const <DeezerTrack>[],
+        current: current,
+        upcoming: upcoming,
+        shuffled: _state.shuffle,
+      ),
+    );
     await _directPlay(current);
   }
 
   @override
   Future<void> addToQueueNext(DeezerTrack track) async {
     _emitQueue(
-        _queue.copyWith(upcoming: <DeezerTrack>[track, ..._queue.upcoming]));
+      _queue.copyWith(upcoming: <DeezerTrack>[track, ..._queue.upcoming]),
+    );
   }
 
   @override
   Future<void> addToQueueLast(DeezerTrack track) async {
     _emitQueue(
-        _queue.copyWith(upcoming: <DeezerTrack>[..._queue.upcoming, track]));
+      _queue.copyWith(upcoming: <DeezerTrack>[..._queue.upcoming, track]),
+    );
   }
 
   @override
@@ -693,10 +784,66 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   @override
   Future<void> clearQueue() async {
-    _emitQueue(_queue.copyWith(
-      upcoming: const <DeezerTrack>[],
-      history: const <DeezerTrack>[],
-    ));
+    _emitQueue(
+      _queue.copyWith(
+        upcoming: const <DeezerTrack>[],
+        history: const <DeezerTrack>[],
+      ),
+    );
+  }
+
+  @override
+  Future<void> toggleRelatedMode() async {
+    if (_queue.isRelatedMode) {
+      // Disable related mode
+      _emitQueue(_queue.copyWith(
+        isRelatedMode: false,
+        upcoming: _queue.originalUpcoming,
+        originalUpcoming: const <DeezerTrack>[],
+      ));
+    } else {
+      // Enable related mode
+      _emitQueue(_queue.copyWith(
+        isRelatedMode: true,
+        originalUpcoming: _queue.upcoming,
+        upcoming: const <DeezerTrack>[], // clear upcoming while loading
+      ));
+
+      if (_queue.current != null) {
+        final track = _queue.current!;
+        final artistName = track.artist?.name ?? '';
+        final trackName = track.title;
+        if (artistName.isNotEmpty) {
+          try {
+            final similar = await LastfmApiClient().getSimilarTracks(trackName, artistName);
+            final deezerApi = DeezerApiClient();
+            final newTracks = <DeezerTrack>[];
+            for (final t in similar) {
+              final tName = t['name'] ?? '';
+              final tArtist = t['artist'] ?? '';
+              if (tName.isEmpty || tArtist.isEmpty) continue;
+              try {
+                final res = await deezerApi.searchTracks('artist:"$tArtist" track:"$tName"');
+                if (res.isNotEmpty) {
+                  final exists = [..._queue.history, _queue.current].any((e) => e?.id == res.first.id);
+                  if (!exists) {
+                    newTracks.add(res.first);
+                  }
+                }
+              } catch (_) {}
+              if (newTracks.length >= 10) break;
+            }
+            // Only update upcoming if we are still in related mode
+            if (_queue.isRelatedMode) {
+              _emitQueue(_queue.copyWith(upcoming: newTracks));
+            }
+          } catch (e) {
+            appLogger.e('Failed to toggle related mode: $e');
+            // If failed, just leave it empty and it will fall back to charting tracks if skipNext is called or we can just leave it
+          }
+        }
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

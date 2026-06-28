@@ -105,6 +105,58 @@ class StubMusicPlayerService implements MusicPlayerService {
   }
 
   @override
+  Future<void> skipToIndex(int indexInUpcoming) async {
+    if (indexInUpcoming < 0 || indexInUpcoming >= _queue.upcoming.length) return;
+    final next = _queue.upcoming[indexInUpcoming];
+    final newUpcoming = _queue.upcoming.sublist(indexInUpcoming + 1);
+    final skippedTracks = _queue.upcoming.sublist(0, indexInUpcoming);
+    final newHistory = <DeezerTrack>[
+      ..._queue.history,
+      if (_queue.current != null) _queue.current!,
+      ...skippedTracks,
+    ];
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: next,
+        upcoming: newUpcoming,
+      ),
+    );
+    _emitPlayer(
+      _player.copyWith(
+        currentTrack: next,
+        position: Duration.zero,
+      ),
+    );
+  }
+
+  @override
+  Future<void> skipToHistory(int indexInHistory) async {
+    if (indexInHistory < 0 || indexInHistory >= _queue.history.length) return;
+    final prev = _queue.history[indexInHistory];
+    final newHistory = _queue.history.sublist(0, indexInHistory);
+    final skippedHistory = _queue.history.sublist(indexInHistory + 1);
+    final newUpcoming = <DeezerTrack>[
+      ...skippedHistory,
+      if (_queue.current != null) _queue.current!,
+      ..._queue.upcoming,
+    ];
+    _emitQueue(
+      _queue.copyWith(
+        history: newHistory,
+        current: prev,
+        upcoming: newUpcoming,
+      ),
+    );
+    _emitPlayer(
+      _player.copyWith(
+        currentTrack: prev,
+        position: Duration.zero,
+      ),
+    );
+  }
+
+  @override
   Future<void> skipPrevious() async {
     if (_queue.history.isEmpty) {
       await seek(Duration.zero);
@@ -240,5 +292,23 @@ class StubMusicPlayerService implements MusicPlayerService {
   Future<void> dispose() async {
     await _playerCtrl.close();
     await _queueCtrl.close();
+  }
+
+  @override
+  Future<void> toggleRelatedMode() async {
+    // Stub implementation
+    if (_queue.isRelatedMode) {
+      _emitQueue(_queue.copyWith(
+        isRelatedMode: false,
+        upcoming: _queue.originalUpcoming,
+        originalUpcoming: const <DeezerTrack>[],
+      ));
+    } else {
+      _emitQueue(_queue.copyWith(
+        isRelatedMode: true,
+        originalUpcoming: _queue.upcoming,
+        upcoming: const <DeezerTrack>[],
+      ));
+    }
   }
 }
