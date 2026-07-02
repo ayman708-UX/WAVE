@@ -25,6 +25,7 @@ import '../../widgets/player/sleep_timer_dial.dart';
 import '../../widgets/player/waveform_bars.dart';
 import '../../core/downloads/download_manager.dart';
 import '../../core/downloads/download_providers.dart';
+import '../../core/downloads/download_status.dart';
 
 /// Now-Playing screen. Branches on `theme.id` to render six distinct
 /// presentations of the same player state.
@@ -737,7 +738,7 @@ class _DownloadButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
     final downloadedTracks = ref.watch(downloadedTracksProvider);
-    final isDownloaded = downloadedTracks.any((t) => t.id == track.id);
+    final isDownloaded = isTrackOnDevice(track, downloadedTracks);
     
     final activeDownloads = ref.watch(activeDownloadsProvider);
     final progress = activeDownloads[track.id];
@@ -761,10 +762,14 @@ class _DownloadButton extends ConsumerWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
+        final manager = ref.read(downloadManagerProvider);
         if (isDownloaded) {
-          ref.read(downloadManagerProvider).deleteDownload(track.id);
+          manager.deleteDownload(track.id);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Removed from device: ${track.title}')),
+          );
         } else {
-          ref.read(downloadManagerProvider).downloadTrack(track);
+          manager.downloadTrack(track);
         }
       },
       child: Padding(

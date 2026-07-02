@@ -35,6 +35,36 @@ final downloadLocationProvider = FutureProvider<String>((ref) async {
   return ref.read(downloadManagerProvider).downloadsDirectory();
 });
 
+class DownloadExportTarget {
+  const DownloadExportTarget({
+    required this.privatePath,
+    required this.exportPath,
+    required this.label,
+    required this.isPublicBackup,
+  });
+
+  final String privatePath;
+  final String exportPath;
+  final String label;
+  final bool isPublicBackup;
+}
+
+class DownloadExportResult {
+  const DownloadExportResult({
+    required this.privatePath,
+    required this.exportPath,
+    required this.filesCopied,
+    required this.bytesCopied,
+    required this.metadataItems,
+  });
+
+  final String privatePath;
+  final String exportPath;
+  final int filesCopied;
+  final int bytesCopied;
+  final int metadataItems;
+}
+
 class ActiveDownloadsNotifier extends Notifier<Map<int, double>> {
   @override
   Map<int, double> build() => {};
@@ -268,6 +298,140 @@ class DownloadManager {
 
   Future<String> downloadsDirectory() => _getAppDir();
 
+  Future<DownloadExportTarget> downloadExportTarget() async {
+    final privatePath = await _getAppDir();
+    final exportPath = await _defaultExportDir();
+
+    return DownloadExportTarget(
+      privatePath: privatePath,
+      exportPath: exportPath,
+      label: _exportLabelForPath(exportPath),
+      isPublicBackup: exportPath != privatePath,
+    );
+  }
+
+  Future<String> _defaultExportDir({String? parentDirectory}) async {
+    if (parentDirectory != null && parentDirectory.trim().isNotEmpty) {
+      return p.join(parentDirectory, 'WAVE', 'wave_downloads');
+    }
+
+    if (Platform.isAndroid) {
+      // Best-effort user-visible Android backup path.
+      // WAVE still keeps its playable offline files inside app-private storage.
+      return p.join(
+        '/storage/emulated/0',
+        'Download',
+        'WAVE',
+        'wave_downloads',
+      );
+    }
+
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      try {
+        final downloads = await getDownloadsDirectory();
+        if (downloads != null) {
+          return p.join(downloads.path, 'WAVE', 'wave_downloads');
+        }
+      } catch (_) {
+        // Fall back below.
+      }
+    }
+
+    final docs = await getApplicationDocumentsDirectory();
+    return p.join(docs.path, 'WAVE', 'wave_downloads');
+  }
+
+  String _exportLabelForPath(String path) {
+    if (Platform.isAndroid &&
+        path.replaceAll('\\', '/').contains('/Download/WAVE/wave_downloads')) {
+      return 'Internal storage/Download/WAVE/wave_downloads';
+    }
+    return path;
+  }
+
+  Future<DownloadExportResult> exportDownloadsBackup({
+    String? parentDirectory,
+  }) async {
+    final privatePath = await _getAppDir();
+    final exportPath = await _defaultExportDir(parentDirectory: parentDirectory);
+
+    final sourceDir = Directory(privatePath);
+    if (!await sourceDir.exists()) {
+      throw Exception('WAVE private download folder was not found.');
+    }
+
+    final destDir = Directory(exportPath);
+    if (!await destDir.exists()) {
+      await destDir.create(recursive: true);
+    }
+
+    var filesCopied = 0;
+    var bytesCopied = 0;
+
+    await for (final entity in sourceDir.list(recursive: false)) {
+      if (entity is! File) continue;
+
+      final name = p.basename(entity.path);
+      final lowerName = name.toLowerCase();
+      final ext = p.extension(lowerName);
+
+      if (name.endsWith('.part') || name.contains('.part.seg')) {
+        continue;
+      }
+
+      // Export backup is for songs only. Do not copy downloaded cover artwork
+      // or any extra metadata files into the user's public backup folder.
+      if (lowerName.contains('_cover') ||
+          ext == '.jpg' ||
+          ext == '.jpeg' ||
+          ext == '.png' ||
+          ext == '.webp' ||
+          ext == '.gif' ||
+          lowerName == 'wave_downloads_manifest.json') {
+        continue;
+      }
+
+      final target = File(p.join(destDir.path, name));
+      await target.parent.create(recursive: true);
+      await entity.copy(target.path);
+
+      filesCopied++;
+      bytesCopied += await target.length();
+    }
+
+    appLogger.i(
+      'Exported WAVE song backup to $exportPath '
+      '($filesCopied audio files, $bytesCopied bytes)',
+    );
+
+    return DownloadExportResult(
+      privatePath: privatePath,
+      exportPath: exportPath,
+      filesCopied: filesCopied,
+      bytesCopied: bytesCopied,
+      metadataItems: 0,
+    );
+  }
+
+  Future<void> openExportedDownloadsFolder({String? parentDirectory}) async {
+    final dir = await _defaultExportDir(parentDirectory: parentDirectory);
+
+    if (Platform.isWindows) {
+      await Process.run('explorer.exe', <String>[dir]);
+      return;
+    }
+    if (Platform.isMacOS) {
+      await Process.run('open', <String>[dir]);
+      return;
+    }
+    if (Platform.isLinux) {
+      await Process.run('xdg-open', <String>[dir]);
+      return;
+    }
+
+    throw UnsupportedError(_exportLabelForPath(dir));
+  }
+
   String? localAudioPathFor(int trackId) {
     final data = _box.get(trackId);
     if (data is! Map) return null;
@@ -306,8 +470,9 @@ class DownloadManager {
       return;
     }
 
+    final target = await downloadExportTarget();
     throw UnsupportedError(
-      'On Android, WAVE downloads are stored in app-private storage: $dir',
+      'WAVE stores playable downloads privately. Use Export backup to copy them to ${target.label}.',
     );
   }
 

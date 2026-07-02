@@ -950,6 +950,8 @@ class _FollowingTab extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 // Downloads ---------------------------------------------------------------
 
+enum _DownloadFilter { all, notInPlaylist, inPlaylist }
+
 class _DownloadsTab extends ConsumerStatefulWidget {
   const _DownloadsTab();
 
@@ -960,6 +962,8 @@ class _DownloadsTab extends ConsumerStatefulWidget {
 class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
   late final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
+  _DownloadFilter _filter = _DownloadFilter.all;
+  final Set<int> _selectedIds = <int>{};
 
   @override
   void dispose() {
@@ -967,11 +971,75 @@ class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
     super.dispose();
   }
 
+  bool get _selectionMode => _selectedIds.isNotEmpty;
+
+  void _setFilter(_DownloadFilter filter) {
+    setState(() {
+      _filter = filter;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelected(int trackId) {
+    setState(() {
+      if (_selectedIds.contains(trackId)) {
+        _selectedIds.remove(trackId);
+      } else {
+        _selectedIds.add(trackId);
+      }
+    });
+  }
+
+  void _enterSelection(int trackId) {
+    setState(() {
+      _selectedIds.add(trackId);
+    });
+  }
+
+  void _selectAllVisible(List<DeezerTrack> visible) {
+    setState(() {
+      _selectedIds
+        ..clear()
+        ..addAll(visible.map((track) => track.id));
+    });
+  }
+
+  void _clearSelection() {
+    setState(() => _selectedIds.clear());
+  }
+
+  void _openBulkAddSheet(List<DeezerTrack> downloaded) {
+    final selectedTracks = downloaded
+        .where((track) => _selectedIds.contains(track.id))
+        .toList(growable: false);
+
+    if (selectedTracks.isEmpty) return;
+
+    showAddTracksToPlaylistSheet(context, selectedTracks);
+  }
+
   @override
   Widget build(BuildContext context) {
     final downloaded = ref.watch(downloadedTracksProvider);
     final queue = ref.watch(downloadQueueProvider);
-    final filtered = _filterDownloadedTracks(downloaded, _query);
+    final tracksByPlaylist = ref.watch(localPlaylistTracksProvider);
+    final playlistTrackIds = _downloadPlaylistTrackIds(tracksByPlaylist);
+    final notInPlaylist = downloaded
+        .where((track) => !playlistTrackIds.contains(track.id))
+        .toList(growable: false);
+    final inPlaylist = downloaded
+        .where((track) => playlistTrackIds.contains(track.id))
+        .toList(growable: false);
+
+    final base = switch (_filter) {
+      _DownloadFilter.all => downloaded,
+      _DownloadFilter.notInPlaylist => notInPlaylist,
+      _DownloadFilter.inPlaylist => inPlaylist,
+    };
+    final filtered = _filterDownloadedTracks(base, _query);
+
+    final validIds = downloaded.map((track) => track.id).toSet();
+    _selectedIds.removeWhere((id) => !validIds.contains(id));
 
     return ListView(
       physics: const BouncingScrollPhysics(),
@@ -989,7 +1057,7 @@ class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
             child: Text(
-              'Downloaded tracks',
+              'Download manager',
               style: TextStyle(
                 color: AppThemeScope.of(context).onSurface,
                 fontSize: 16,
@@ -997,8 +1065,16 @@ class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
               ),
             ),
           ),
+          _DownloadKpiStrip(
+            downloadedCount: downloaded.length,
+            notInPlaylistCount: notInPlaylist.length,
+            inPlaylistCount: inPlaylist.length,
+            playlistCount: ref.watch(userPlaylistsProvider).length,
+            activeFilter: _filter,
+            onTap: _setFilter,
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
             child: _DownloadsSearchField(
               controller: _searchCtrl,
               onChanged: (value) => setState(() => _query = value),
@@ -1010,11 +1086,33 @@ class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
                     },
             ),
           ),
+          if (_selectionMode)
+            _BulkSelectionBar(
+              selectedCount: _selectedIds.length,
+              visibleCount: filtered.length,
+              onAddToPlaylist: () => _openBulkAddSheet(downloaded),
+              onSelectAll: () => _selectAllVisible(filtered),
+              onClear: _clearSelection,
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Text(
+                'Long press any downloaded song or use the checkboxes to select multiple songs.',
+                style: TextStyle(
+                  color: AppThemeScope.of(context).onSurfaceMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           if (filtered.isEmpty)
             _EmptyHint(
               icon: PhosphorIconsRegular.magnifyingGlass,
               title: 'No downloaded songs found',
-              subtitle: 'Try title, artist, album, or a close spelling.',
+              subtitle: _filter == _DownloadFilter.notInPlaylist
+                  ? 'Everything downloaded is already inside a playlist.'
+                  : 'Try title, artist, album, or a close spelling.',
             )
           else
             ...List<Widget>.generate(filtered.length, (i) {
@@ -1023,12 +1121,28 @@ class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
                 track: t,
                 queue: filtered,
                 indexInQueue: i,
+                selected: _selectedIds.contains(t.id),
+                selectionMode: _selectionMode,
+                onToggleSelected: () => _toggleSelected(t.id),
+                onEnterSelection: () => _enterSelection(t.id),
               );
             }),
         ],
       ],
     );
   }
+}
+
+Set<int> _downloadPlaylistTrackIds(
+  Map<int, List<DeezerTrack>> tracksByPlaylist,
+) {
+  final ids = <int>{};
+  for (final tracks in tracksByPlaylist.values) {
+    for (final track in tracks) {
+      ids.add(track.id);
+    }
+  }
+  return ids;
 }
 
 List<DeezerTrack> _filterDownloadedTracks(
@@ -1108,6 +1222,224 @@ int _levenshteinDistance(String a, String b) {
   return previous[b.length];
 }
 
+class _DownloadKpiStrip extends StatelessWidget {
+  const _DownloadKpiStrip({
+    required this.downloadedCount,
+    required this.notInPlaylistCount,
+    required this.inPlaylistCount,
+    required this.playlistCount,
+    required this.activeFilter,
+    required this.onTap,
+  });
+
+  final int downloadedCount;
+  final int notInPlaylistCount;
+  final int inPlaylistCount;
+  final int playlistCount;
+  final _DownloadFilter activeFilter;
+  final ValueChanged<_DownloadFilter> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemeScope.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: <Widget>[
+          _DownloadKpiCard(
+            label: 'Downloaded',
+            value: downloadedCount,
+            icon: PhosphorIconsFill.cloudCheck,
+            active: activeFilter == _DownloadFilter.all,
+            onTap: () => onTap(_DownloadFilter.all),
+          ),
+          _DownloadKpiCard(
+            label: 'Not in playlist',
+            value: notInPlaylistCount,
+            icon: PhosphorIconsRegular.warningCircle,
+            active: activeFilter == _DownloadFilter.notInPlaylist,
+            onTap: () => onTap(_DownloadFilter.notInPlaylist),
+          ),
+          _DownloadKpiCard(
+            label: 'In playlists',
+            value: inPlaylistCount,
+            icon: PhosphorIconsRegular.playlist,
+            active: activeFilter == _DownloadFilter.inPlaylist,
+            onTap: () => onTap(_DownloadFilter.inPlaylist),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: theme.surface,
+              borderRadius: BorderRadius.circular(
+                theme.cardRadius == 0 ? 0 : 16,
+              ),
+              border: Border.all(
+                color: theme.onSurface.withValues(alpha: 0.10),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  PhosphorIconsRegular.listBullets,
+                  color: theme.onSurfaceMuted,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$playlistCount playlists',
+                  style: TextStyle(
+                    color: theme.onSurfaceMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadKpiCard extends StatelessWidget {
+  const _DownloadKpiCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemeScope.of(context);
+    final border = active ? theme.accent : theme.onSurface.withValues(alpha: 0.10);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: theme.fastDuration,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: active
+              ? theme.accent.withValues(alpha: 0.12)
+              : theme.surface,
+          borderRadius: BorderRadius.circular(
+            theme.cardRadius == 0 ? 0 : 16,
+          ),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              icon,
+              color: active ? theme.accent : theme.onSurfaceMuted,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$value',
+              style: TextStyle(
+                color: active ? theme.accent : theme.onSurface,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? theme.onSurface : theme.onSurfaceMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BulkSelectionBar extends StatelessWidget {
+  const _BulkSelectionBar({
+    required this.selectedCount,
+    required this.visibleCount,
+    required this.onAddToPlaylist,
+    required this.onSelectAll,
+    required this.onClear,
+  });
+
+  final int selectedCount;
+  final int visibleCount;
+  final VoidCallback onAddToPlaylist;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemeScope.of(context);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 16),
+        border: Border.all(color: theme.accent.withValues(alpha: 0.55)),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Text(
+              '$selectedCount selected',
+              style: TextStyle(
+                color: theme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          _SmallActionButton(
+            label: 'Add to playlist',
+            icon: PhosphorIconsRegular.playlist,
+            onTap: onAddToPlaylist,
+            filled: true,
+          ),
+          _SmallActionButton(
+            label: 'Select visible ($visibleCount)',
+            icon: PhosphorIconsRegular.checks,
+            onTap: onSelectAll,
+          ),
+          _SmallActionButton(
+            label: 'Clear',
+            icon: PhosphorIconsRegular.x,
+            onTap: onClear,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DownloadsSearchField extends StatelessWidget {
   const _DownloadsSearchField({
     required this.controller,
@@ -1184,38 +1516,139 @@ class _DownloadedTrackTile extends ConsumerWidget {
     required this.track,
     required this.queue,
     required this.indexInQueue,
+    required this.selected,
+    required this.selectionMode,
+    required this.onToggleSelected,
+    required this.onEnterSelection,
   });
 
   final DeezerTrack track;
   final List<DeezerTrack> queue;
   final int indexInQueue;
+  final bool selected;
+  final bool selectionMode;
+  final VoidCallback onToggleSelected;
+  final VoidCallback onEnterSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
     final playlists = ref.watch(playlistsForTrackProvider(track.id));
     final inPlaylist = playlists.isNotEmpty;
+    final cover = track.album?.coverMedium ??
+        track.album?.cover ??
+        track.album?.coverSmall;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Stack(
-          children: <Widget>[
-            TrackRow(track: track, queue: queue, indexInQueue: indexInQueue),
-            Positioned(
-              top: 8,
-              right: 12,
-              child: Icon(
-                PhosphorIconsFill.cloudCheck,
-                color: theme.accent,
-                size: 14,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: selectionMode
+              ? onToggleSelected
+              : () => ref
+                  .read(playerControlsProvider)
+                  .playTracks(queue, startIndex: indexInQueue),
+          onLongPress: onEnterSelection,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? theme.accent.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(
+                theme.cardRadius == 0 ? 0 : 14,
+              ),
+              border: Border.all(
+                color: selected
+                    ? theme.accent.withValues(alpha: 0.65)
+                    : Colors.transparent,
               ),
             ),
-          ],
+            child: Row(
+              children: <Widget>[
+                Checkbox(
+                  value: selected,
+                  onChanged: (_) => onToggleSelected(),
+                  visualDensity: VisualDensity.compact,
+                ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(
+                    theme.cardRadius == 0 ? 0 : 8,
+                  ),
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: cover != null
+                        ? CachedNetworkImage(
+                            imageUrl: cover,
+                            fit: BoxFit.cover,
+                            placeholder: (_, _) =>
+                                ColoredBox(color: theme.surface),
+                            errorWidget: (_, _, _) =>
+                                ColoredBox(color: theme.surface),
+                          )
+                        : ColoredBox(
+                            color: theme.surface,
+                            child: Icon(
+                              PhosphorIconsRegular.musicNotes,
+                              color: theme.onSurfaceMuted,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        track.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.onSurface,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        track.artist?.name ?? 'Unknown artist',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.onSurfaceMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (!selectionMode)
+                  Icon(
+                    PhosphorIconsFill.cloudCheck,
+                    color: theme.accent,
+                    size: 16,
+                  )
+                else
+                  Icon(
+                    selected
+                        ? PhosphorIconsFill.checkCircle
+                        : PhosphorIconsRegular.circle,
+                    color: selected ? theme.accent : theme.onSurfaceMuted,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
         ),
         if (inPlaylist)
           Padding(
-            padding: const EdgeInsets.fromLTRB(72, 0, 16, 6),
+            padding: const EdgeInsets.fromLTRB(88, 0, 16, 6),
             child: Text(
               'In playlist: ${_playlistPreview(playlists)}',
               maxLines: 1,
@@ -1226,19 +1659,32 @@ class _DownloadedTrackTile extends ConsumerWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(72, 0, 16, 10),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: _SmallActionButton(
-              label: inPlaylist ? 'Manage playlists' : 'Add to playlist',
-              icon: PhosphorIconsRegular.playlist,
-              onTap: () => showAddToPlaylistSheet(context, track),
-              filled: true,
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(88, 0, 16, 6),
+            child: Text(
+              'Not in any playlist',
+              style: TextStyle(
+                color: theme.onSurfaceMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
+        if (!selectionMode)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(88, 0, 16, 10),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _SmallActionButton(
+                label: inPlaylist ? 'Manage playlists' : 'Add to playlist',
+                icon: PhosphorIconsRegular.playlist,
+                onTap: () => showAddToPlaylistSheet(context, track),
+                filled: true,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -1422,13 +1868,117 @@ class _DownloadQueueCard extends ConsumerWidget {
   }
 }
 
-class _DownloadLocationCard extends ConsumerWidget {
+class _DownloadLocationCard extends ConsumerStatefulWidget {
   const _DownloadLocationCard();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DownloadLocationCard> createState() =>
+      _DownloadLocationCardState();
+}
+
+class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
+  bool _exporting = false;
+
+  Future<void> _exportBackup() async {
+    if (_exporting) return;
+
+    setState(() => _exporting = true);
+
+    try {
+      final result = await ref
+          .read(downloadManagerProvider)
+          .exportDownloadsBackup();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Downloads exported: ${result.filesCopied} files · '
+            '${_formatBytes(result.bytesCopied)} → '
+            'Internal storage/Download/WAVE/wave_downloads',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not export to Internal storage/Download/WAVE/wave_downloads. '
+            'Android may have blocked public Download folder access on this device. $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _exporting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = AppThemeScope.of(context);
-    final locationAsync = ref.watch(downloadLocationProvider);
+
+    if (!Platform.isAndroid) {
+      final locationAsync = ref.watch(downloadLocationProvider);
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.background,
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 14),
+          border: Border.all(color: theme.onSurface.withValues(alpha: 0.10)),
+        ),
+        child: locationAsync.when(
+          loading: () => Text(
+            'Finding download folder...',
+            style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
+          ),
+          error: (_, _) => Text(
+            'Could not show download folder',
+            style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
+          ),
+          data: (path) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Download folder',
+                style: TextStyle(
+                  color: theme.onSurface,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                path,
+                style: TextStyle(color: theme.onSurfaceMuted, fontSize: 11),
+              ),
+              const SizedBox(height: 10),
+              _SmallActionButton(
+                label: 'Open folder',
+                icon: PhosphorIconsRegular.folderOpen,
+                onTap: () async {
+                  try {
+                    await ref.read(downloadManagerProvider).openDownloadsFolder();
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.toString())),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -1438,70 +1988,67 @@ class _DownloadLocationCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 14),
         border: Border.all(color: theme.onSurface.withValues(alpha: 0.10)),
       ),
-      child: locationAsync.when(
-        loading: () => Text(
-          'Finding download folder...',
-          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
-        ),
-        error: (_, _) => Text(
-          'Could not show download folder',
-          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
-        ),
-        data: (path) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              'Download folder',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Downloads backup',
+            style: TextStyle(
+              color: theme.onSurface,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'WAVE keeps songs in private app storage so offline playback works.',
+            style: TextStyle(
+              color: theme.onSurfaceMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Export backup copies them to:',
+            style: TextStyle(
+              color: theme.onSurfaceMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Internal storage/Download/WAVE/wave_downloads',
+            style: TextStyle(
+              color: theme.onSurface,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _SmallActionButton(
+            label: _exporting ? 'Exporting...' : 'Export backup',
+            icon: PhosphorIconsRegular.export,
+            onTap: _exporting ? () {} : _exportBackup,
+            filled: true,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'This is a copy/backup. WAVE will still play from its private folder.',
               style: TextStyle(
-                color: theme.onSurface,
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
+                color: theme.onSurfaceMuted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              path,
-              style: TextStyle(color: theme.onSurfaceMuted, fontSize: 11),
-            ),
-            if (Platform.isWindows || Platform.isMacOS || Platform.isLinux)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: _SmallActionButton(
-                  label: 'Open folder',
-                  icon: PhosphorIconsRegular.export,
-                  onTap: () async {
-                    try {
-                      await ref.read(downloadManagerProvider).openDownloadsFolder();
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.toString())),
-                        );
-                      }
-                    }
-                  },
-                  filled: true,
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Android stores these in WAVE app-private storage.',
-                  style: TextStyle(
-                    color: theme.onSurfaceMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
-
 
 String _currentDownloadDetail(DownloadQueueItem item) {
   final percent = (item.progress.clamp(0.0, 1.0) * 100).floor();

@@ -9,18 +9,27 @@ import '../../core/storage/library_providers.dart';
 import '../../core/theme/app_theme.dart';
 
 void showAddToPlaylistSheet(BuildContext context, DeezerTrack track) {
+  showAddTracksToPlaylistSheet(context, <DeezerTrack>[track]);
+}
+
+void showAddTracksToPlaylistSheet(
+  BuildContext context,
+  List<DeezerTrack> tracks,
+) {
+  if (tracks.isEmpty) return;
+
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _AddToPlaylistSheet(track: track),
+    builder: (ctx) => _AddToPlaylistSheet(tracks: tracks),
   );
 }
 
 class _AddToPlaylistSheet extends ConsumerStatefulWidget {
-  const _AddToPlaylistSheet({required this.track});
+  const _AddToPlaylistSheet({required this.tracks});
 
-  final DeezerTrack track;
+  final List<DeezerTrack> tracks;
 
   @override
   ConsumerState<_AddToPlaylistSheet> createState() => _AddToPlaylistSheetState();
@@ -29,6 +38,9 @@ class _AddToPlaylistSheet extends ConsumerStatefulWidget {
 class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
   final _controller = TextEditingController();
   bool _creating = false;
+
+  bool get _single => widget.tracks.length == 1;
+  DeezerTrack get _firstTrack => widget.tracks.first;
 
   @override
   void dispose() {
@@ -42,12 +54,12 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
 
     final playlist = await ref.read(userPlaylistsProvider.notifier).create(
           title: title,
-          coverUrl: widget.track.album?.coverBig ?? widget.track.album?.cover,
+          coverUrl: _firstTrack.album?.coverBig ?? _firstTrack.album?.cover,
         );
 
     await ref
         .read(localPlaylistTracksProvider.notifier)
-        .addTrack(playlist.id, widget.track);
+        .addTracks(playlist.id, widget.tracks);
 
     if (!mounted) return;
     setState(() {
@@ -56,25 +68,33 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Added to "${playlist.title}"')),
+      SnackBar(content: Text(_addedMessage(playlist.title, widget.tracks.length))),
     );
   }
 
-  Future<void> _togglePlaylist(DeezerPlaylist playlist, bool alreadyIn) async {
+  Future<void> _togglePlaylist(
+    DeezerPlaylist playlist, {
+    required int alreadyCount,
+  }) async {
     final notifier = ref.read(localPlaylistTracksProvider.notifier);
-    if (alreadyIn) {
-      await notifier.removeTrack(playlist.id, widget.track.id);
+    final allInPlaylist = alreadyCount == widget.tracks.length;
+
+    if (allInPlaylist) {
+      await notifier.removeTracks(
+        playlist.id,
+        widget.tracks.map((track) => track.id),
+      );
     } else {
-      await notifier.addTrack(playlist.id, widget.track);
+      await notifier.addTracks(playlist.id, widget.tracks);
     }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          alreadyIn
-              ? 'Removed from "${playlist.title}"'
-              : 'Added to "${playlist.title}"',
+          allInPlaylist
+              ? _removedMessage(playlist.title, widget.tracks.length)
+              : _addedMessage(playlist.title, widget.tracks.length - alreadyCount),
         ),
       ),
     );
@@ -85,7 +105,15 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
     final theme = AppThemeScope.of(context);
     final playlists = ref.watch(userPlaylistsProvider);
     final tracksByPlaylist = ref.watch(localPlaylistTracksProvider);
-    final alreadyIn = ref.watch(playlistsForTrackProvider(widget.track.id));
+    final selectedIds = widget.tracks.map((track) => track.id).toSet();
+
+    final alreadyIn = _single
+        ? ref.watch(playlistsForTrackProvider(_firstTrack.id))
+        : playlists.where((playlist) {
+            final tracks =
+                tracksByPlaylist[playlist.id] ?? const <DeezerTrack>[];
+            return tracks.any((track) => selectedIds.contains(track.id));
+          }).toList(growable: false);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.68,
@@ -110,7 +138,7 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Manage playlists',
+                _single ? 'Manage playlists' : 'Add selected to playlist',
                 style: TextStyle(
                   color: theme.onSurface,
                   fontSize: 18,
@@ -121,9 +149,7 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  alreadyIn.isEmpty
-                      ? 'This downloaded song is not in any playlist yet.'
-                      : 'Already in: ${_playlistNames(alreadyIn)}',
+                  _subtitle(alreadyIn),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: theme.onSurfaceMuted,
@@ -193,7 +219,9 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                     ),
                   ),
                   subtitle: Text(
-                    'Creates it and adds this song',
+                    _single
+                        ? 'Creates it and adds this song'
+                        : 'Creates it and adds ${widget.tracks.length} selected songs',
                     style: TextStyle(
                       color: theme.onSurfaceMuted,
                       fontSize: 12,
@@ -220,8 +248,11 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                           final playlist = playlists[i];
                           final tracks = tracksByPlaylist[playlist.id] ??
                               const <DeezerTrack>[];
-                          final isInPlaylist =
-                              tracks.any((t) => t.id == widget.track.id);
+                          final alreadyCount = tracks
+                              .where((track) => selectedIds.contains(track.id))
+                              .length;
+                          final allInPlaylist =
+                              alreadyCount == widget.tracks.length;
                           final cover = playlist.pictureBig ??
                               playlist.pictureMedium ??
                               playlist.picture;
@@ -256,27 +287,32 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                               ),
                             ),
                             subtitle: Text(
-                              isInPlaylist
-                                  ? 'In this playlist · tap to remove'
-                                  : '${playlist.nbTracks ?? tracks.length} tracks · tap to add',
+                              _playlistSubtitle(
+                                playlist: playlist,
+                                playlistTrackCount: tracks.length,
+                                alreadyCount: alreadyCount,
+                              ),
                               style: TextStyle(
-                                color: isInPlaylist
+                                color: allInPlaylist
                                     ? theme.accent
                                     : theme.onSurfaceMuted,
                                 fontSize: 12,
-                                fontWeight: isInPlaylist
+                                fontWeight: allInPlaylist
                                     ? FontWeight.w700
                                     : FontWeight.w500,
                               ),
                             ),
                             trailing: _PlaylistTogglePill(
-                              label: isInPlaylist ? 'Remove' : 'Add',
-                              icon: isInPlaylist
+                              label: allInPlaylist ? 'Remove' : 'Add',
+                              icon: allInPlaylist
                                   ? PhosphorIconsRegular.minusCircle
                                   : PhosphorIconsRegular.plusCircle,
-                              accent: isInPlaylist ? theme.error : theme.accent,
+                              accent: allInPlaylist ? theme.error : theme.accent,
                             ),
-                            onTap: () => _togglePlaylist(playlist, isInPlaylist),
+                            onTap: () => _togglePlaylist(
+                              playlist,
+                              alreadyCount: alreadyCount,
+                            ),
                           );
                         },
                       ),
@@ -287,6 +323,63 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
       },
     );
   }
+
+  String _subtitle(List<DeezerPlaylist> alreadyIn) {
+    if (_single) {
+      if (alreadyIn.isEmpty) {
+        return 'This downloaded song is not in any playlist yet.';
+      }
+      return 'Already in: ${_playlistNames(alreadyIn)}';
+    }
+
+    if (alreadyIn.isEmpty) {
+      return '${widget.tracks.length} selected downloaded songs are not in any playlist yet.';
+    }
+
+    return '${widget.tracks.length} selected songs · already found in ${alreadyIn.length} playlist${alreadyIn.length == 1 ? '' : 's'}.';
+  }
+
+  String _playlistSubtitle({
+    required DeezerPlaylist playlist,
+    required int playlistTrackCount,
+    required int alreadyCount,
+  }) {
+    if (_single) {
+      return alreadyCount > 0
+          ? 'In this playlist · tap to remove'
+          : '${playlist.nbTracks ?? playlistTrackCount} tracks · tap to add';
+    }
+
+    if (alreadyCount == widget.tracks.length) {
+      return 'All ${widget.tracks.length} selected are in this playlist · tap to remove';
+    }
+
+    if (alreadyCount > 0) {
+      final missing = widget.tracks.length - alreadyCount;
+      return '$alreadyCount already here · tap to add $missing missing';
+    }
+
+    return '${playlist.nbTracks ?? playlistTrackCount} tracks · tap to add selected';
+  }
+}
+
+String _playlistNames(List<DeezerPlaylist> playlists) {
+  if (playlists.length <= 2) {
+    return playlists.map((p) => p.title).join(', ');
+  }
+  return '${playlists.take(2).map((p) => p.title).join(', ')} +${playlists.length - 2}';
+}
+
+String _addedMessage(String playlistTitle, int count) {
+  return count == 1
+      ? 'Added to "$playlistTitle"'
+      : 'Added $count songs to "$playlistTitle"';
+}
+
+String _removedMessage(String playlistTitle, int count) {
+  return count == 1
+      ? 'Removed from "$playlistTitle"'
+      : 'Removed $count songs from "$playlistTitle"';
 }
 
 class _PlaylistTogglePill extends StatelessWidget {
@@ -326,12 +419,4 @@ class _PlaylistTogglePill extends StatelessWidget {
       ),
     );
   }
-}
-
-String _playlistNames(List<DeezerPlaylist> playlists) {
-  if (playlists.length <= 3) {
-    return playlists.map((p) => p.title).join(', ');
-  }
-  final first = playlists.take(3).map((p) => p.title).join(', ');
-  return '$first +${playlists.length - 3} more';
 }
