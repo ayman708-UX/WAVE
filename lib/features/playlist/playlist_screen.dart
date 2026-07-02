@@ -12,6 +12,7 @@ import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
 import '../../core/downloads/download_manager.dart';
 import '../../core/downloads/download_providers.dart';
+import '../../core/downloads/download_status.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/utils/playlist_exchange.dart';
 import '../../core/theme/app_theme.dart';
@@ -901,16 +902,39 @@ class _DownloadPlaylistButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    final enabled = tracks.isNotEmpty;
+    final coverage = downloadCoverageForTracks(
+      tracks,
+      ref.watch(downloadedTracksProvider),
+    );
+    final enabled = coverage.hasTracks;
+    final allOnDevice = coverage.allOnDevice;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: !enabled
           ? null
           : () {
-              ref.read(downloadManagerProvider).downloadPlaylist(title, tracks);
+              if (allOnDevice) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Playlist is already on device: $title')),
+                );
+                return;
+              }
+              ref.read(downloadManagerProvider).queueTracks(
+                    coverage.missingTracks,
+                    title: coverage.partiallyOnDevice
+                        ? 'Missing playlist tracks: $title'
+                        : 'Playlist: $title',
+                    replaceFinishedQueue: false,
+                  );
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Queued playlist download: $title')),
+                SnackBar(
+                  content: Text(
+                    coverage.partiallyOnDevice
+                        ? 'Queued ${coverage.missing} missing playlist tracks: $title'
+                        : 'Queued playlist download: $title',
+                  ),
+                ),
               );
             },
       child: AnimatedOpacity(
@@ -925,22 +949,30 @@ class _DownloadPlaylistButton extends ConsumerWidget {
               theme.cardRadius == 0 ? 0 : 999,
             ),
             border: Border.all(
-              color: theme.onSurface.withValues(alpha: 0.12),
+              color: allOnDevice
+                  ? theme.accent.withValues(alpha: 0.55)
+                  : theme.onSurface.withValues(alpha: 0.12),
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Icon(
-                PhosphorIconsRegular.cloudArrowDown,
-                color: theme.onSurface,
+                allOnDevice
+                    ? PhosphorIconsFill.cloudCheck
+                    : PhosphorIconsRegular.cloudArrowDown,
+                color: allOnDevice ? theme.accent : theme.onSurface,
                 size: 16,
               ),
               const SizedBox(width: 8),
               Text(
-                'Download playlist',
+                allOnDevice
+                    ? 'Playlist on device'
+                    : (coverage.partiallyOnDevice
+                        ? 'Download missing (${coverage.missing})'
+                        : 'Download playlist'),
                 style: TextStyle(
-                  color: theme.onSurface,
+                  color: allOnDevice ? theme.accent : theme.onSurface,
                   fontSize: 13,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.3,

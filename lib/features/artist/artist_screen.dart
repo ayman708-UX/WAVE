@@ -9,6 +9,8 @@ import '../../core/api/models/deezer_artist.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
 import '../../core/downloads/download_manager.dart';
+import '../../core/downloads/download_providers.dart';
+import '../../core/downloads/download_status.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/content_cards.dart';
@@ -343,6 +345,14 @@ class _ActionRow extends ConsumerWidget {
     final following =
         ref.watch(followedArtistsProvider).any((a) => a.id == artist.id);
     final topAsync = ref.watch(artistTopTracksProvider(artist.id));
+    final popularTracks = topAsync.maybeWhen(
+      data: (t) => t.take(10).toList(growable: false),
+      orElse: () => const <DeezerTrack>[],
+    );
+    final popularCoverage = downloadCoverageForTracks(
+      popularTracks,
+      ref.watch(downloadedTracksProvider),
+    );
     return Row(
       children: <Widget>[
         Expanded(
@@ -372,11 +382,7 @@ class _ActionRow extends ConsumerWidget {
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            final tracks = topAsync.maybeWhen(
-              data: (t) => t.take(10).toList(growable: false),
-              orElse: () => const <DeezerTrack>[],
-            );
-            if (tracks.isEmpty) {
+            if (!popularCoverage.hasTracks) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Popular tracks are still loading'),
@@ -384,19 +390,29 @@ class _ActionRow extends ConsumerWidget {
               );
               return;
             }
+            if (popularCoverage.allOnDevice) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Popular tracks are already on device: ${artist.name}'),
+                ),
+              );
+              return;
+            }
 
-            ref
-                .read(downloadManagerProvider)
-                .queueTracks(
-                  tracks,
-                  title: 'Popular: ${artist.name}',
+            ref.read(downloadManagerProvider).queueTracks(
+                  popularCoverage.missingTracks,
+                  title: popularCoverage.partiallyOnDevice
+                      ? 'Missing popular tracks: ${artist.name}'
+                      : 'Popular: ${artist.name}',
                   replaceFinishedQueue: false,
                 );
 
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Queued popular tracks: ${artist.name}',
+                  popularCoverage.partiallyOnDevice
+                      ? 'Queued ${popularCoverage.missing} missing popular tracks: ${artist.name}'
+                      : 'Queued popular tracks: ${artist.name}',
                 ),
               ),
             );
@@ -408,12 +424,16 @@ class _ActionRow extends ConsumerWidget {
               borderRadius: BorderRadius.circular(
                   theme.cardRadius == 0 ? 0 : 999),
               border: Border.all(
-                color: theme.onSurface.withValues(alpha: 0.2),
+                color: popularCoverage.allOnDevice
+                    ? theme.accent
+                    : theme.onSurface.withValues(alpha: 0.2),
               ),
             ),
             child: Icon(
-              PhosphorIconsRegular.cloudArrowDown,
-              color: theme.onSurface,
+              popularCoverage.allOnDevice
+                  ? PhosphorIconsFill.cloudCheck
+                  : PhosphorIconsRegular.cloudArrowDown,
+              color: popularCoverage.allOnDevice ? theme.accent : theme.onSurface,
               size: 16,
             ),
           ),

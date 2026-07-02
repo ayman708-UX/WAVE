@@ -10,10 +10,11 @@ import '../core/api/models/deezer_playlist.dart';
 import '../core/api/models/deezer_track.dart';
 import '../core/audio/player_providers.dart';
 import '../core/downloads/download_providers.dart';
-import '../core/downloads/local_download_matcher.dart';
+import '../core/downloads/download_status.dart';
 import '../core/router/app_router.dart';
 import '../core/storage/recently_played.dart';
 import '../core/theme/app_theme.dart';
+import 'on_device_badge.dart';
 
 /// Album-cover sized card with title + subtitle, used by Made-for-you,
 /// New releases, Mixes, Editorial, etc.
@@ -237,11 +238,10 @@ class TrackRow extends ConsumerWidget {
     final cover = track.album?.coverMedium ??
         track.album?.cover ??
         track.album?.coverSmall;
-    final downloadedMatch = LocalDownloadMatcher.findDownloadedMatchInList(
+    final onDevice = isTrackOnDevice(
       track,
       ref.watch(downloadedTracksProvider),
     );
-    final onDevice = downloadedMatch != null;
     final placeholder = Container(
       width: 48,
       height: 48,
@@ -328,7 +328,7 @@ class TrackRow extends ConsumerWidget {
                   if (onDevice)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: _OnDeviceBadge(theme: theme),
+                      child: OnDeviceBadge(theme: theme),
                     ),
                 ],
               ),
@@ -349,44 +349,6 @@ class TrackRow extends ConsumerWidget {
   }
 }
 
-
-class _OnDeviceBadge extends StatelessWidget {
-  const _OnDeviceBadge({required this.theme});
-
-  final AppTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: theme.accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.45)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(
-            PhosphorIconsFill.cloudCheck,
-            color: theme.accent,
-            size: 11,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            'On device',
-            style: TextStyle(
-              color: theme.accent,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 String _fmtDuration(int? secs) {
   if (secs == null || secs <= 0) return '--:--';
@@ -410,12 +372,28 @@ class TrackCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = AppThemeScope.of(context);
     final cover = track.album?.coverBig ?? track.album?.coverMedium ?? track.album?.cover;
+    final onDevice = isTrackOnDevice(
+      track,
+      ref.watch(downloadedTracksProvider),
+    );
     return CoverCard(
       imageUrl: cover,
       title: track.title,
-      subtitle: track.artist?.name ?? 'Track',
+      subtitle: onDevice
+          ? '${track.artist?.name ?? 'Track'} · On device'
+          : (track.artist?.name ?? 'Track'),
       size: size,
+      overlay: onDevice
+          ? Align(
+              alignment: Alignment.bottomLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: OnDeviceBadge(theme: theme, compact: true),
+              ),
+            )
+          : null,
       onTap: () async {
         final controls = ref.read(playerControlsProvider);
         final indexInQueue = queue.indexOf(track);

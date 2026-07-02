@@ -7,9 +7,10 @@ import '../core/api/models/deezer_track.dart';
 import '../core/audio/player_providers.dart';
 import '../core/downloads/download_manager.dart';
 import '../core/downloads/download_providers.dart';
-import '../core/downloads/local_download_matcher.dart';
+import '../core/downloads/download_status.dart';
 import '../core/storage/library_providers.dart';
 import '../core/theme/app_theme.dart';
+import 'on_device_badge.dart';
 import 'context_menu.dart';
 
 /// Tracklist row used by Album / Playlist pages. Shows numbered position,
@@ -39,10 +40,10 @@ class DetailTrackRow extends ConsumerWidget {
     final liked = ref
         .watch(likedTracksProvider)
         .any((t) => t.id == track.id);
-    // For the manual "Download track" action, use exact Deezer ID only.
-    // Fuzzy matching is still used by playback/local-first, but it must not
-    // block downloading a specific version the user tapped.
-    final downloaded = LocalDownloadMatcher.isDownloadedById(track.id);
+    final downloaded = isTrackOnDevice(
+      track,
+      ref.watch(downloadedTracksProvider),
+    );
     final downloading = ref.watch(activeDownloadsProvider).containsKey(track.id);
     final cover = track.album?.coverSmall ?? track.album?.cover;
     return GestureDetector(
@@ -121,6 +122,11 @@ class DetailTrackRow extends ConsumerWidget {
                           fontSize: 12,
                         ),
                       ),
+                    ),
+                  if (downloaded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: OnDeviceBadge(theme: theme),
                     ),
                 ],
               ),

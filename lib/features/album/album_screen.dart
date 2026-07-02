@@ -9,6 +9,8 @@ import '../../core/api/models/deezer_album.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
 import '../../core/downloads/download_manager.dart';
+import '../../core/downloads/download_providers.dart';
+import '../../core/downloads/download_status.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/theme/app_theme.dart';
@@ -68,6 +70,16 @@ class _AlbumBody extends ConsumerWidget {
     final theme = AppThemeScope.of(context);
     final saved =
         ref.watch(likedAlbumsProvider).any((a) => a.id == album.id);
+    final downloadableTracks = tracksAsync.maybeWhen(
+      data: (t) => t
+          .map((track) => track.album == null ? track.copyWith(album: album) : track)
+          .toList(growable: false),
+      orElse: () => const <DeezerTrack>[],
+    );
+    final albumCoverage = downloadCoverageForTracks(
+      downloadableTracks,
+      ref.watch(downloadedTracksProvider),
+    );
     final cover = album.coverXl ??
         album.coverBig ??
         album.coverMedium ??
@@ -203,22 +215,28 @@ class _AlbumBody extends ConsumerWidget {
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
-                        final tracks = tracksAsync.maybeWhen(
-                          data: (t) => t
-                              .map((track) => track.album == null
-                                  ? track.copyWith(album: album)
-                                  : track)
-                              .toList(growable: false),
-                          orElse: () => const <DeezerTrack>[],
-                        );
-                        if (tracks.isEmpty) return;
-                        ref
-                            .read(downloadManagerProvider)
-                            .downloadAlbum(album.title, tracks);
+                        if (!albumCoverage.hasTracks) return;
+                        if (albumCoverage.allOnDevice) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Album is already on device: ${album.title}'),
+                            ),
+                          );
+                          return;
+                        }
+                        ref.read(downloadManagerProvider).queueTracks(
+                              albumCoverage.missingTracks,
+                              title: albumCoverage.partiallyOnDevice
+                                  ? 'Missing album tracks: ${album.title}'
+                                  : 'Album: ${album.title}',
+                              replaceFinishedQueue: false,
+                            );
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Queued album download: ${album.title}',
+                              albumCoverage.partiallyOnDevice
+                                  ? 'Queued ${albumCoverage.missing} missing album tracks: ${album.title}'
+                                  : 'Queued album download: ${album.title}',
                             ),
                           ),
                         );
@@ -230,12 +248,18 @@ class _AlbumBody extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(
                               theme.cardRadius == 0 ? 0 : 999),
                           border: Border.all(
-                            color: theme.onSurface.withValues(alpha: 0.2),
+                            color: albumCoverage.allOnDevice
+                                ? theme.accent
+                                : theme.onSurface.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Icon(
-                          PhosphorIconsRegular.cloudArrowDown,
-                          color: theme.onSurface,
+                          albumCoverage.allOnDevice
+                              ? PhosphorIconsFill.cloudCheck
+                              : PhosphorIconsRegular.cloudArrowDown,
+                          color: albumCoverage.allOnDevice
+                              ? theme.accent
+                              : theme.onSurface,
                           size: 16,
                         ),
                       ),

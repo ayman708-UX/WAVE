@@ -297,35 +297,41 @@ class LocalPlaylistTracksNotifier extends Notifier<Map<int, List<DeezerTrack>>> 
   }
 
   Future<void> addTrack(int playlistId, DeezerTrack track) async {
-    final currentList = state[playlistId] ?? <DeezerTrack>[];
-    if (currentList.any((t) => t.id == track.id)) {
-      return;
-    }
+    await addTracks(playlistId, <DeezerTrack>[track]);
+  }
 
-    final newList = <DeezerTrack>[...currentList, track];
+  Future<void> addTracks(int playlistId, List<DeezerTrack> tracks) async {
+    if (tracks.isEmpty) return;
+
+    final currentList = state[playlistId] ?? <DeezerTrack>[];
+    final existingIds = currentList.map((t) => t.id).toSet();
+    final toAdd = tracks
+        .where((track) => !existingIds.contains(track.id))
+        .toList(growable: false);
+
+    if (toAdd.isEmpty) return;
+
+    final newList = <DeezerTrack>[...currentList, ...toAdd];
 
     state = <int, List<DeezerTrack>>{
       ...state,
       playlistId: newList,
     };
 
-    final tracksBox = Hive.box<dynamic>(HiveBoxes.playlistTracks);
-    await tracksBox.put(
-      playlistId.toString(),
-      newList.map((t) => _deepJson(t.toJson())).toList(),
-    );
-
-    await _writePlaylistMetadata(playlistId, newList);
-
-    // playlistProvider(id) watches userPlaylistsProvider for local playlists,
-    // so this refreshes open local playlist headers and list screens.
-    ref.invalidate(userPlaylistsProvider);
+    await _persistPlaylistTracks(playlistId, newList);
   }
 
   Future<void> removeTrack(int playlistId, int trackId) async {
+    await removeTracks(playlistId, <int>[trackId]);
+  }
+
+  Future<void> removeTracks(int playlistId, Iterable<int> trackIds) async {
+    final ids = trackIds.toSet();
+    if (ids.isEmpty) return;
+
     final currentList = state[playlistId] ?? <DeezerTrack>[];
     final newList = currentList
-        .where((t) => t.id != trackId)
+        .where((t) => !ids.contains(t.id))
         .toList(growable: false);
 
     state = <int, List<DeezerTrack>>{
@@ -333,13 +339,20 @@ class LocalPlaylistTracksNotifier extends Notifier<Map<int, List<DeezerTrack>>> 
       playlistId: newList,
     };
 
+    await _persistPlaylistTracks(playlistId, newList);
+  }
+
+  Future<void> _persistPlaylistTracks(
+    int playlistId,
+    List<DeezerTrack> tracks,
+  ) async {
     final tracksBox = Hive.box<dynamic>(HiveBoxes.playlistTracks);
     await tracksBox.put(
       playlistId.toString(),
-      newList.map((t) => _deepJson(t.toJson())).toList(),
+      tracks.map((t) => _deepJson(t.toJson())).toList(),
     );
 
-    await _writePlaylistMetadata(playlistId, newList);
+    await _writePlaylistMetadata(playlistId, tracks);
 
     // playlistProvider(id) watches userPlaylistsProvider for local playlists,
     // so this refreshes open local playlist headers and list screens.
