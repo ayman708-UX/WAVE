@@ -4,12 +4,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/api/deezer_providers.dart';
 import '../../core/api/models/deezer_playlist.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
+import '../../core/downloads/download_manager.dart';
+import '../../core/downloads/download_providers.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/utils/playlist_exchange.dart';
 import '../../core/theme/app_theme.dart';
@@ -18,6 +20,7 @@ import '../../widgets/detail_track_row.dart';
 import '../../widgets/inline_error.dart';
 import '../../widgets/play_shuffle_pair.dart';
 import '../../widgets/shimmer.dart';
+import '../../widgets/swipe_action_row.dart';
 
 class PlaylistScreen extends ConsumerStatefulWidget {
   const PlaylistScreen({super.key, required this.playlistId});
@@ -109,6 +112,12 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     List<DeezerTrack>? directTracks,
     bool isLiked,
   ) {
+    final liveTrackCount = directTracks?.length ??
+        asyncTracks?.maybeWhen(
+          data: (tracks) => tracks.length,
+          orElse: () => pl.nbTracks ?? 0,
+        ) ??
+        (pl.nbTracks ?? 0);
     final cover =
         pl.pictureBig ?? pl.pictureXl ?? pl.pictureMedium ?? pl.picture;
     return CustomScrollView(
@@ -151,9 +160,13 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 const SizedBox(height: 18),
                 _editing
                     ? _editableHeader(theme, pl)
-                    : _staticHeader(theme, pl),
+                    : _staticHeader(theme, pl, liveTrackCount),
                 const SizedBox(height: 14),
-                if (_isUserPlaylist) _editToggle(theme, pl),
+                if (_isUserPlaylist) ...<Widget>[
+                  _editToggle(theme, pl),
+                  const SizedBox(height: 10),
+                  _addDownloadsButton(theme),
+                ],
                 const SizedBox(height: 8),
                 PlayShufflePair(
                   onPlay: () {
@@ -175,6 +188,14 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                     await controls.setShuffle(true);
                     await controls.playTracks(tracks);
                   },
+                ),
+                const SizedBox(height: 10),
+                _DownloadPlaylistButton(
+                  title: pl.title,
+                  tracks: directTracks ?? asyncTracks?.maybeWhen(
+                    data: (t) => t,
+                    orElse: () => const <DeezerTrack>[],
+                  ) ?? const <DeezerTrack>[],
                 ),
                 const SizedBox(height: 12),
               ],
@@ -290,7 +311,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     );
   }
 
-  Widget _staticHeader(AppTheme theme, DeezerPlaylist pl) {
+  Widget _staticHeader(AppTheme theme, DeezerPlaylist pl, int liveTrackCount) {
     final mins = (pl.duration ?? 0) ~/ 60;
     return Column(
       children: <Widget>[
@@ -320,7 +341,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           <String>[
             if ((pl.creator?.name ?? '').isNotEmpty) 'by ${pl.creator!.name}',
             if ((pl.fans ?? 0) > 0) '${pl.fans} followers',
-            if ((pl.nbTracks ?? 0) > 0) '${pl.nbTracks} tracks',
+            if (liveTrackCount > 0) '$liveTrackCount tracks',
             if (mins > 0) '${mins}m',
           ].join('  ·  '),
           textAlign: TextAlign.center,
@@ -441,6 +462,211 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     );
   }
 
+  Widget _addDownloadsButton(AppTheme theme) {
+    final downloadedCount = ref.watch(downloadedTracksProvider).length;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: downloadedCount == 0 ? null : _openAddDownloadsSheet,
+      child: AnimatedOpacity(
+        duration: theme.fastDuration,
+        opacity: downloadedCount == 0 ? 0.45 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: theme.surface,
+            borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
+            border: Border.all(
+              color: theme.onSurface.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                PhosphorIconsRegular.cloudCheck,
+                color: theme.onSurface,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                downloadedCount == 0
+                    ? 'No downloads to add'
+                    : 'Add songs from downloads',
+                style: TextStyle(
+                  color: theme.onSurface,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAddDownloadsSheet() async {
+    final theme = AppThemeScope.of(context);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final downloaded = ref.watch(downloadedTracksProvider);
+            final playlistTracks =
+                ref.watch(localPlaylistTracksProvider)[widget.playlistId] ??
+                    const <DeezerTrack>[];
+            final existingIds = playlistTracks.map((t) => t.id).toSet();
+            final available = downloaded
+                .where((track) => !existingIds.contains(track.id))
+                .toList(growable: false);
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.72,
+              minChildSize: 0.42,
+              maxChildSize: 0.92,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: theme.surface,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                  ),
+                  child: Column(
+                    children: <Widget>[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: theme.onSurfaceMuted.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Add downloaded songs',
+                        style: TextStyle(
+                          color: theme.onSurface,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        available.isEmpty
+                            ? 'All downloaded songs are already in this playlist.'
+                            : '${available.length} available from Downloads',
+                        style: TextStyle(
+                          color: theme.onSurfaceMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: available.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'Nothing to add.',
+                                  style: TextStyle(
+                                    color: theme.onSurfaceMuted,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: scrollController,
+                                itemCount: available.length,
+                                itemBuilder: (context, i) {
+                                  final track = available[i];
+                                  final cover = track.album?.coverMedium ??
+                                      track.album?.cover ??
+                                      track.album?.coverSmall;
+
+                                  return ListTile(
+                                    leading: ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                        theme.cardRadius == 0 ? 0 : 8,
+                                      ),
+                                      child: SizedBox(
+                                        width: 48,
+                                        height: 48,
+                                        child: cover != null
+                                            ? CachedNetworkImage(
+                                                imageUrl: cover,
+                                                fit: BoxFit.cover,
+                                                placeholder: (_, _) =>
+                                                    ColoredBox(color: theme.background),
+                                                errorWidget: (_, _, _) =>
+                                                    ColoredBox(color: theme.background),
+                                              )
+                                            : ColoredBox(
+                                                color: theme.background,
+                                                child: Icon(
+                                                  PhosphorIconsRegular.musicNotes,
+                                                  color: theme.onSurfaceMuted,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    title: Text(
+                                      track.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: theme.onSurface,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      track.artist?.name ?? 'Unknown artist',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: theme.onSurfaceMuted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    trailing: Icon(
+                                      PhosphorIconsRegular.plusCircle,
+                                      color: theme.accent,
+                                    ),
+                                    onTap: () async {
+                                      await ref
+                                          .read(localPlaylistTracksProvider.notifier)
+                                          .addTrack(widget.playlistId, track);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Added "${track.title}" to playlist',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _staticList(List<DeezerTrack> tracks) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -458,17 +684,44 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   Widget _userReorderableList(List<DeezerTrack> tracks) {
     final theme = AppThemeScope.of(context);
     return SliverReorderableList(
-      itemBuilder: (context, i) => Material(
-        key: ValueKey<int>(tracks[i].id),
-        color: theme.background,
-        child: DetailTrackRow(
-          track: tracks[i],
-          queue: tracks,
-          indexInQueue: i,
-          position: i + 1,
-          dragHandle: true,
-        ),
-      ),
+      itemBuilder: (context, i) {
+        final track = tracks[i];
+        return Material(
+          key: ValueKey<String>('playlist_${widget.playlistId}_${track.id}'),
+          color: theme.background,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              SwipeActionRow(
+                trailingIcon: PhosphorIconsRegular.trash,
+                trailingColor: theme.error,
+                trailingLabel: 'Remove',
+                onTrailing: () => _removeTrackFromPlaylist(track),
+                child: DetailTrackRow(
+                  track: track,
+                  queue: tracks,
+                  indexInQueue: i,
+                  position: i + 1,
+                  dragHandle: true,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _PillButton(
+                    label: 'REMOVE FROM PLAYLIST',
+                    background: theme.error.withValues(alpha: 0.10),
+                    border: theme.error.withValues(alpha: 0.65),
+                    color: theme.error,
+                    onTap: () => _removeTrackFromPlaylist(track),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
       itemCount: tracks.length,
       onReorder: (oldIndex, newIndex) {
         ref.read(localPlaylistTracksProvider.notifier).reorderTrack(
@@ -477,6 +730,20 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
               newIndex,
             );
       },
+    );
+  }
+
+  Future<void> _removeTrackFromPlaylist(DeezerTrack track) async {
+    await ref
+        .read(localPlaylistTracksProvider.notifier)
+        .removeTrack(widget.playlistId, track.id);
+
+    ref.invalidate(playlistProvider(widget.playlistId));
+    if (mounted) setState(() {});
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Removed "${track.title}" from playlist')),
     );
   }
 
@@ -615,6 +882,72 @@ class _UnderlineField extends StatelessWidget {
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
+        ),
+      ),
+    );
+  }
+}
+
+
+class _DownloadPlaylistButton extends ConsumerWidget {
+  const _DownloadPlaylistButton({
+    required this.title,
+    required this.tracks,
+  });
+
+  final String title;
+  final List<DeezerTrack> tracks;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = AppThemeScope.of(context);
+    final enabled = tracks.isNotEmpty;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: !enabled
+          ? null
+          : () {
+              ref.read(downloadManagerProvider).downloadPlaylist(title, tracks);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Queued playlist download: $title')),
+              );
+            },
+      child: AnimatedOpacity(
+        duration: theme.fastDuration,
+        opacity: enabled ? 1 : 0.45,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          decoration: BoxDecoration(
+            color: theme.surface,
+            borderRadius: BorderRadius.circular(
+              theme.cardRadius == 0 ? 0 : 999,
+            ),
+            border: Border.all(
+              color: theme.onSurface.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                PhosphorIconsRegular.cloudArrowDown,
+                color: theme.onSurface,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Download playlist',
+                style: TextStyle(
+                  color: theme.onSurface,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

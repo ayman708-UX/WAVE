@@ -2,12 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/api/deezer_providers.dart';
 import '../../core/api/models/deezer_album.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
+import '../../core/downloads/download_manager.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/theme/app_theme.dart';
@@ -194,6 +195,47 @@ class _AlbumBody extends ConsumerWidget {
                               ? PhosphorIconsFill.heart
                               : PhosphorIconsRegular.heart,
                           color: saved ? theme.accent : theme.onSurface,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        final tracks = tracksAsync.maybeWhen(
+                          data: (t) => t
+                              .map((track) => track.album == null
+                                  ? track.copyWith(album: album)
+                                  : track)
+                              .toList(growable: false),
+                          orElse: () => const <DeezerTrack>[],
+                        );
+                        if (tracks.isEmpty) return;
+                        ref
+                            .read(downloadManagerProvider)
+                            .downloadAlbum(album.title, tracks);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Queued album download: ${album.title}',
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(
+                              theme.cardRadius == 0 ? 0 : 999),
+                          border: Border.all(
+                            color: theme.onSurface.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Icon(
+                          PhosphorIconsRegular.cloudArrowDown,
+                          color: theme.onSurface,
                           size: 16,
                         ),
                       ),

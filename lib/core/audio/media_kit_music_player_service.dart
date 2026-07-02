@@ -12,11 +12,13 @@ import '../api/models/deezer_track.dart';
 import '../api/models/player_state.dart';
 import '../api/models/queue_state.dart';
 import '../storage/hive_boxes.dart';
+import '../downloads/local_download_matcher.dart';
 import '../utils/app_logger.dart';
 import '../utils/youtube_stream_http.dart';
 import 'local_proxy.dart';
 import 'music_player_service.dart';
 import 'youtube_stream_resolver.dart';
+import 'youtube_rate_limit_guard.dart';
 
 /// Real audio backend powered by `media_kit` (libmpv).
 /// Uses a dual-player architecture to support true overlapping crossfades.
@@ -45,12 +47,110 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   PlayerState _state = const PlayerState();
   QueueState _queue = const QueueState();
   bool _loading = false;
+  int _playbackOp = 0;
 
   Timer? _crossfadeTimer;
+  Timer? _loadingWatchdog;
   Object? _crossfadeTag;
   bool _isCrossfading = false;
   bool _autoCrossfadeTriggered = false;
+  bool _audioResetting = false;
+  int? _lastAutoRecoveryTrackId;
   List<double> _equalizerBandsDb = const <double>[0, 0, 0, 0, 0];
+
+  int _nextPlaybackOp() => ++_playbackOp;
+
+  bool _isStalePlaybackOp(int op) => op != _playbackOp;
+
+  void _cancelTransitions() {
+    _crossfadeTimer?.cancel();
+    _crossfadeTag = Object();
+    _isCrossfading = false;
+    _autoCrossfadeTriggered = false;
+  }
+
+  void _cancelLoadingWatchdog() {
+    _loadingWatchdog?.cancel();
+    _loadingWatchdog = null;
+  }
+
+  void _setLoadingForOp(int op, bool value) {
+    if (!_isStalePlaybackOp(op)) {
+      _loading = value;
+      if (!value) _cancelLoadingWatchdog();
+    }
+  }
+
+  void _startLoadingWatchdog(int op, DeezerTrack track) {
+    _cancelLoadingWatchdog();
+    _loadingWatchdog = Timer(const Duration(seconds: 45), () {
+      if (_isStalePlaybackOp(op) || !_loading) return;
+      appLogger.e('Playback watchdog fired for ${track.title}');
+      unawaited(
+        _recoverAudioPipeline(
+          track,
+          reason: 'playback watchdog timed out',
+          retryCurrentTrack: true,
+        ),
+      );
+    });
+  }
+
+  Future<void> _safeStopPlayer(mk.Player player) async {
+    try {
+      await player.stop().timeout(const Duration(seconds: 4));
+    } catch (e) {
+      appLogger.w('Player stop timeout/error during reset: $e');
+    }
+  }
+
+  Future<void> _resetAudioPipeline({required String reason}) async {
+    if (_audioResetting) return;
+    _audioResetting = true;
+    appLogger.w('Resetting audio pipeline: $reason');
+    _cancelTransitions();
+    _cancelLoadingWatchdog();
+    _loading = false;
+    await _safeStopPlayer(_playerA);
+    await _safeStopPlayer(_playerB);
+    try {
+      await LocalProxy.restart();
+    } catch (e) {
+      appLogger.w('LocalProxy restart failed during audio reset: $e');
+    } finally {
+      _audioResetting = false;
+    }
+  }
+
+  Future<void> _recoverAudioPipeline(
+    DeezerTrack? track, {
+    required String reason,
+    bool retryCurrentTrack = false,
+  }) async {
+    final retryTrack = track ?? _queue.current;
+    final canRetry = retryCurrentTrack &&
+        retryTrack != null &&
+        _queue.current?.id == retryTrack.id &&
+        _lastAutoRecoveryTrackId != retryTrack.id;
+
+    _nextPlaybackOp();
+    await _resetAudioPipeline(reason: reason);
+
+    if (canRetry) {
+      _lastAutoRecoveryTrackId = retryTrack.id;
+      final retryOp = _nextPlaybackOp();
+      await _loadAndPlay(retryTrack, _activePlayer, retryOp);
+      return;
+    }
+
+    _emitPlayer(
+      _state.copyWith(
+        status: PlaybackStatus.idle,
+        position: Duration.zero,
+        errorMessage: 'Audio engine reset. Press play again.',
+      ),
+    );
+  }
 
   void _initPlayer(mk.Player player) {
     player.stream.playing.listen((v) => _onPlayingChanged(player, v));
@@ -241,7 +341,10 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       if (artistName.isEmpty) return;
 
       try {
-        final similar = await LastfmApiClient().getSimilarTracks(trackName, artistName);
+        final similar = await LastfmApiClient().getSimilarTracks(
+          trackName,
+          artistName,
+        );
         if (similar.isNotEmpty) {
           final deezerApi = DeezerApiClient();
           final newTracks = <DeezerTrack>[];
@@ -250,10 +353,16 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             final tArtist = t['artist'] ?? '';
             if (tName.isEmpty || tArtist.isEmpty) continue;
             try {
-              final res = await deezerApi.searchTracks('artist:"$tArtist" track:"$tName"');
+              final res = await deezerApi.searchTracks(
+                'artist:"$tArtist" track:"$tName"',
+              );
               if (res.isNotEmpty) {
                 // Avoid adding tracks already in history or upcoming
-                final exists = [..._queue.history, ..._queue.upcoming, _queue.current].any((e) => e?.id == res.first.id);
+                final exists = [
+                  ..._queue.history,
+                  ..._queue.upcoming,
+                  _queue.current,
+                ].any((e) => e?.id == res.first.id);
                 if (!exists) {
                   newTracks.add(res.first);
                 }
@@ -262,7 +371,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             if (newTracks.length >= 10) break;
           }
           if (newTracks.isNotEmpty) {
-             _emitQueue(_queue.copyWith(upcoming: [..._queue.upcoming, ...newTracks]));
+            _emitQueue(
+              _queue.copyWith(upcoming: [..._queue.upcoming, ...newTracks]),
+            );
           }
         }
       } catch (e) {
@@ -332,12 +443,14 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   /// Force-stop everything and play directly with no crossfade at all.
   Future<void> _directPlay(DeezerTrack track) async {
-    _crossfadeTimer?.cancel();
-    _isCrossfading = false;
-    _autoCrossfadeTriggered = false;
-    await _activePlayer.stop();
-    await _inactivePlayer.stop();
-    await _loadAndPlay(track, _activePlayer);
+    final op = _nextPlaybackOp();
+    _cancelTransitions();
+    _cancelLoadingWatchdog();
+    _loading = false;
+    await _safeStopPlayer(_activePlayer);
+    await _safeStopPlayer(_inactivePlayer);
+    if (_isStalePlaybackOp(op)) return;
+    await _loadAndPlay(track, _activePlayer, op);
   }
 
   /// Start playback with optional crossfade.
@@ -346,6 +459,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     DeezerTrack track, {
     required bool autoCrossfade,
   }) async {
+    final op = _nextPlaybackOp();
     _autoCrossfadeTriggered = false;
 
     final int fadeSecs = _state.crossfadeSeconds;
@@ -357,12 +471,12 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         _activePlayer.state.playing && crossfadeDuration > Duration.zero;
 
     if (!canCrossfade) {
-      _crossfadeTimer?.cancel();
-      _isCrossfading = false;
-      await _activePlayer.stop();
-      await _inactivePlayer.stop();
+      _cancelTransitions();
+      await _safeStopPlayer(_activePlayer);
+      await _safeStopPlayer(_inactivePlayer);
+      if (_isStalePlaybackOp(op)) return;
 
-      await _loadAndPlay(track, _activePlayer);
+      await _loadAndPlay(track, _activePlayer, op);
       return;
     }
 
@@ -370,7 +484,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     _crossfadeTimer?.cancel();
     if (_isCrossfading) {
       // Stop the player that was fading out from the previous crossfade
-      await _inactivePlayer.stop();
+      await _safeStopPlayer(_inactivePlayer);
     }
     _isCrossfading = true;
 
@@ -385,7 +499,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     await fadingInPlayer.setVolume(0.0);
 
     // Begin loading
-    _loading = true;
+    _setLoadingForOp(op, true);
     _emitPlayer(
       _state.copyWith(
         currentTrack: track,
@@ -399,18 +513,29 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     );
 
     try {
+      _startLoadingWatchdog(op, track);
+
       String? url;
       String? userAgent;
 
-      final localPath = _getDownloadedAudioPath(track.id);
+      final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
       if (localPath == null) {
-        final res = await _resolver.resolveUrl(track);
+        await LocalProxy.ensureRunning();
+        appLogger.i('Resolving playback stream for ${track.artist?.name ?? ''} - ${track.title}');
+        final res = await _resolver.resolveUrl(track).timeout(
+          const Duration(seconds: 22),
+          onTimeout: () {
+            appLogger.w('Stream resolution timed out for ${track.title}');
+            return null;
+          },
+        );
         url = res?.url;
         userAgent = res?.userAgent;
       } else {
         url = 'file://$localPath'; // Wrap local path in file:// URI
       }
       if (url == null) throw Exception('No audio source found');
+      if (_isStalePlaybackOp(op)) return;
 
       // Route YouTube urls through our local proxy
       if (YoutubeStreamHttp.isYoutubeCdnUrl(url) && LocalProxy.isRunning) {
@@ -420,21 +545,48 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
-      await fadingInPlayer.open(mk.Media(url), play: true);
+      await fadingInPlayer.open(mk.Media(url), play: true).timeout(
+            const Duration(seconds: 20),
+            onTimeout: () => throw TimeoutException('Player open timed out'),
+          );
+      await fadingInPlayer.play().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {},
+          );
+      if (_isStalePlaybackOp(op)) {
+        await fadingInPlayer.stop();
+        return;
+      }
       await _applyEqualizerToPlayer(fadingInPlayer);
 
-      _loading = false;
+      _setLoadingForOp(op, false);
+      _lastAutoRecoveryTrackId = null;
       _emitPlayer(_state.copyWith(status: PlaybackStatus.playing));
       _preloadNext();
-    } catch (e, st) {
-      _loading = false;
+    } on YoutubeRateLimitException catch (e) {
+      _setLoadingForOp(op, false);
       _isCrossfading = false;
+      if (_isStalePlaybackOp(op)) return;
+      appLogger.e('YouTube rate limit blocked playback: $e');
+      await _resetAudioPipeline(reason: 'YouTube rate limit');
+      _emitPlayer(
+        _state.copyWith(
+          status: PlaybackStatus.error,
+          errorMessage: e.message,
+        ),
+      );
+      return;
+    } catch (e, st) {
+      _setLoadingForOp(op, false);
+      _isCrossfading = false;
+      if (_isStalePlaybackOp(op)) return;
 
       // Revert the active player swap so the currently playing song isn't interrupted
       _activePlayer = fadingOutPlayer;
       _inactivePlayer = fadingInPlayer;
 
       appLogger.e('media_kit load failed', error: e, stackTrace: st);
+      await _resetAudioPipeline(reason: 'crossfade load failed');
 
       // Attempt to auto-skip to the next song instead of just failing silently and stopping the queue
       unawaited(skipNext());
@@ -453,7 +605,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     int currentStep = 0;
     _crossfadeTimer = Timer.periodic(stepDuration, (timer) async {
       // If a newer crossfade or direct play has started, bail out
-      if (_crossfadeTag != thisTimer) {
+      if (_crossfadeTag != thisTimer || _isStalePlaybackOp(op)) {
         timer.cancel();
         return;
       }
@@ -481,11 +633,11 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     });
   }
 
-  Future<void> _loadAndPlay(DeezerTrack track, mk.Player player) async {
+  Future<void> _loadAndPlay(DeezerTrack track, mk.Player player, int op) async {
     await player.pause();
     await player.setVolume(_state.volume * 100);
 
-    _loading = true;
+    _setLoadingForOp(op, true);
     _emitPlayer(
       _state.copyWith(
         currentTrack: track,
@@ -498,19 +650,35 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       ),
     );
     try {
+      _startLoadingWatchdog(op, track);
+
       String? url;
       String? userAgent;
 
-      final localPath = _getDownloadedAudioPath(track.id);
+      final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
       if (localPath == null) {
-        final res = await _resolver.resolveUrl(track);
+        await LocalProxy.ensureRunning();
+        final res = await _resolver.resolveUrl(track).timeout(
+          const Duration(seconds: 22),
+          onTimeout: () {
+            appLogger.w('Stream resolution timed out for ${track.title}');
+            return null;
+          },
+        );
         url = res?.url;
         userAgent = res?.userAgent;
       } else {
         url = 'file://$localPath';
       }
+      if (_isStalePlaybackOp(op)) return;
+
       if (url == null) {
-        _loading = false;
+        _setLoadingForOp(op, false);
+        if (_queue.upcoming.isNotEmpty) {
+          appLogger.w('No audio source found for ${track.title}; skipping');
+          unawaited(skipNext());
+          return;
+        }
         _emitPlayer(
           _state.copyWith(
             status: PlaybackStatus.error,
@@ -528,14 +696,44 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
-      await player.open(mk.Media(url));
+      await player.open(mk.Media(url), play: true).timeout(
+            const Duration(seconds: 20),
+            onTimeout: () => throw TimeoutException('Player open timed out'),
+          );
+      await player.play().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {},
+          );
+      if (_isStalePlaybackOp(op)) {
+        await player.stop();
+        return;
+      }
       await _applyEqualizerToPlayer(player);
-      _loading = false;
+      _setLoadingForOp(op, false);
+      _lastAutoRecoveryTrackId = null;
       _emitPlayer(_state.copyWith(status: PlaybackStatus.playing));
       _preloadNext();
+    } on YoutubeRateLimitException catch (e) {
+      _setLoadingForOp(op, false);
+      if (_isStalePlaybackOp(op)) return;
+      appLogger.e('YouTube rate limit blocked playback: $e');
+      await _resetAudioPipeline(reason: 'YouTube rate limit');
+      _emitPlayer(
+        _state.copyWith(
+          status: PlaybackStatus.error,
+          errorMessage: e.message,
+        ),
+      );
+      return;
     } catch (e, st) {
-      _loading = false;
+      _setLoadingForOp(op, false);
+      if (_isStalePlaybackOp(op)) return;
       appLogger.e('media_kit load failed', error: e, stackTrace: st);
+      await _resetAudioPipeline(reason: 'track load failed');
+      if (_queue.upcoming.isNotEmpty) {
+        unawaited(skipNext());
+        return;
+      }
       _emitPlayer(
         _state.copyWith(
           status: PlaybackStatus.error,
@@ -546,27 +744,61 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   }
 
   void _preloadNext() async {
-    if (_queue.upcoming.isNotEmpty) {
-      // Background resolution will cache the result instantly
-      await _resolver.resolveUrl(_queue.upcoming.first);
-    }
+    // v21 stability fix: do not resolve the next YouTube stream in the
+    // background on Android/mobile. The same resolver/network stack is used by
+    // the track the user actually tapped, and background preloading can make the
+    // whole player feel stuck when YouTube/CDN calls hang. Play the current track
+    // first; resolve the next one only when it is actually selected.
+    return;
   }
 
   // ---------------------------------------------------------------------------
   // AudioService / Playback control ------------------------------------------
 
   @override
-  Future<void> play() => _activePlayer.play();
+  Future<void> play() async {
+    if (_loading || _state.status == PlaybackStatus.loading) {
+      await _recoverAudioPipeline(
+        _queue.current,
+        reason: 'user pressed play while player was stuck loading',
+        retryCurrentTrack: true,
+      );
+      return;
+    }
+    if (_state.status == PlaybackStatus.idle && _queue.current != null) {
+      await _directPlay(_queue.current!);
+      return;
+    }
+    try {
+      await LocalProxy.ensureRunning();
+    } catch (e) {
+      appLogger.w('LocalProxy ensureRunning failed before resume: $e');
+    }
+    await _activePlayer.play().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {},
+        );
+  }
 
   @override
-  Future<void> pause() => _activePlayer.pause();
+  Future<void> pause() async {
+    if (_loading || _state.status == PlaybackStatus.loading) {
+      await stop();
+      return;
+    }
+    await _activePlayer.pause();
+    await _inactivePlayer.pause();
+    _emitPlayer(_state.copyWith(status: PlaybackStatus.paused));
+  }
 
   @override
   Future<void> stop() async {
-    _crossfadeTimer?.cancel();
-    _isCrossfading = false;
-    await _activePlayer.stop();
-    await _inactivePlayer.stop();
+    _nextPlaybackOp();
+    _cancelTransitions();
+    _cancelLoadingWatchdog();
+    _loading = false;
+    await _safeStopPlayer(_activePlayer);
+    await _safeStopPlayer(_inactivePlayer);
     _emitPlayer(
       _state.copyWith(status: PlaybackStatus.idle, position: Duration.zero),
     );
@@ -583,7 +815,23 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   Future<void> skipToPrevious() async => skipPrevious();
 
   @override
-  Future<void> togglePlayPause() => _activePlayer.playOrPause();
+  Future<void> togglePlayPause() async {
+    if (_loading ||
+        _state.status == PlaybackStatus.loading ||
+        _state.status == PlaybackStatus.buffering) {
+      await _recoverAudioPipeline(
+        _queue.current,
+        reason: 'user pressed play/pause while player was stuck',
+        retryCurrentTrack: true,
+      );
+      return;
+    }
+    if (_activePlayer.state.playing || _state.status == PlaybackStatus.playing) {
+      await pause();
+      return;
+    }
+    await play();
+  }
 
   @override
   Future<void> skipNext() async {
@@ -609,7 +857,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   @override
   Future<void> skipToIndex(int indexInUpcoming) async {
-    if (indexInUpcoming < 0 || indexInUpcoming >= _queue.upcoming.length) return;
+    if (indexInUpcoming < 0 || indexInUpcoming >= _queue.upcoming.length) {
+      return;
+    }
     final next = _queue.upcoming[indexInUpcoming];
     final newUpcoming = _queue.upcoming.sublist(indexInUpcoming + 1);
     final skippedTracks = _queue.upcoming.sublist(0, indexInUpcoming);
@@ -796,18 +1046,22 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   Future<void> toggleRelatedMode() async {
     if (_queue.isRelatedMode) {
       // Disable related mode
-      _emitQueue(_queue.copyWith(
-        isRelatedMode: false,
-        upcoming: _queue.originalUpcoming,
-        originalUpcoming: const <DeezerTrack>[],
-      ));
+      _emitQueue(
+        _queue.copyWith(
+          isRelatedMode: false,
+          upcoming: _queue.originalUpcoming,
+          originalUpcoming: const <DeezerTrack>[],
+        ),
+      );
     } else {
       // Enable related mode
-      _emitQueue(_queue.copyWith(
-        isRelatedMode: true,
-        originalUpcoming: _queue.upcoming,
-        upcoming: const <DeezerTrack>[], // clear upcoming while loading
-      ));
+      _emitQueue(
+        _queue.copyWith(
+          isRelatedMode: true,
+          originalUpcoming: _queue.upcoming,
+          upcoming: const <DeezerTrack>[], // clear upcoming while loading
+        ),
+      );
 
       if (_queue.current != null) {
         final track = _queue.current!;
@@ -815,7 +1069,10 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         final trackName = track.title;
         if (artistName.isNotEmpty) {
           try {
-            final similar = await LastfmApiClient().getSimilarTracks(trackName, artistName);
+            final similar = await LastfmApiClient().getSimilarTracks(
+              trackName,
+              artistName,
+            );
             final deezerApi = DeezerApiClient();
             final newTracks = <DeezerTrack>[];
             for (final t in similar) {
@@ -823,9 +1080,14 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
               final tArtist = t['artist'] ?? '';
               if (tName.isEmpty || tArtist.isEmpty) continue;
               try {
-                final res = await deezerApi.searchTracks('artist:"$tArtist" track:"$tName"');
+                final res = await deezerApi.searchTracks(
+                  'artist:"$tArtist" track:"$tName"',
+                );
                 if (res.isNotEmpty) {
-                  final exists = [..._queue.history, _queue.current].any((e) => e?.id == res.first.id);
+                  final exists = [
+                    ..._queue.history,
+                    _queue.current,
+                  ].any((e) => e?.id == res.first.id);
                   if (!exists) {
                     newTracks.add(res.first);
                   }
@@ -851,18 +1113,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   @override
   bool isDownloaded(int trackId) {
-    if (!Hive.isBoxOpen(HiveBoxes.downloads)) return false;
-    return Hive.box<dynamic>(HiveBoxes.downloads).containsKey(trackId);
+    return LocalDownloadMatcher.isDownloadedById(trackId);
   }
 
-  String? _getDownloadedAudioPath(int trackId) {
-    if (!Hive.isBoxOpen(HiveBoxes.downloads)) return null;
-    final data = Hive.box<dynamic>(HiveBoxes.downloads).get(trackId);
-    if (data is Map) {
-      return data['localAudioPath'] as String?;
-    }
-    return null;
-  }
 
   @override
   Future<void> setEqualizer(List<double> bandsDb) async {
@@ -874,6 +1127,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   @override
   Future<void> dispose() async {
     _crossfadeTimer?.cancel();
+    _cancelLoadingWatchdog();
     await _playerA.dispose();
     await _playerB.dispose();
     _resolver.dispose();
