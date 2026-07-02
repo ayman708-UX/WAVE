@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -28,7 +29,10 @@ class YoutubeAudioExtractor {
       'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 
   static const Duration _configTtl = Duration(hours: 3);
-  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _requestTimeout = Duration(seconds: 10);
+  // Keep playback responsive. A dead candidate must not make the app feel frozen.
+  static const Duration _candidateResolveTimeout = Duration(seconds: 8);
+  static const int _maxVideoCandidates = 2;
 
   static const String _desktopUserAgent = YoutubeStreamHttp.desktopUserAgent;
 
@@ -170,20 +174,41 @@ class YoutubeAudioExtractor {
   _CachedConfig? _config;
   Future<_CachedConfig>? _configInFlight;
 
-  final Map<String, _CachedVideoId> _videoIdCache = {};
+  final Map<String, _CachedVideoIds> _videoIdCache = {};
   final Map<String, _CachedStream> _streamCache = {};
-  
+
   _YtClient? _lastSuccessfulClient;
 
   // ===========================================================================
   // Public API
   // ===========================================================================
 
-  /// Search YouTube for [query] and return the first usable videoId.
+  /// Search YouTube for [query] and return the best ranked videoId.
   ///
   /// Uses the InnerTube search API rather than scraping HTML, which is more
   /// stable across regions and less likely to be blocked.
   Future<String?> searchVideoId(
+    String title,
+    String artist, {
+    Duration? targetDuration,
+    String? titleVersion,
+  }) async {
+    final ids = await searchVideoIds(
+      title,
+      artist,
+      targetDuration: targetDuration,
+      titleVersion: titleVersion,
+    );
+    return ids.isEmpty ? null : ids.first;
+  }
+
+  /// Search YouTube and return ranked candidate videoIds.
+  ///
+  /// A single top result is not enough for reliable playback: some official
+  /// videos are age/region restricted, livestreams, or only expose ciphered
+  /// formats. The caller can try candidates in order until one yields a
+  /// playable audio URL.
+  Future<List<String>> searchVideoIds(
     String title,
     String artist, {
     Duration? targetDuration,
@@ -198,12 +223,14 @@ class YoutubeAudioExtractor {
     final String suffix;
     if (queryLower.contains('live') || normVersionLower.contains('live')) {
       suffix = 'live';
-    } else if (queryLower.contains('remix') || normVersionLower.contains('remix')) {
+    } else if (queryLower.contains('remix') ||
+        normVersionLower.contains('remix')) {
       suffix = 'remix';
     } else if (queryLower.contains('acoustic')) {
       suffix = 'acoustic';
     } else {
-      suffix = 'official audio'; // keeps remixes/covers lower in results by default
+      suffix =
+          'official audio'; // keeps remixes/covers lower in results by default
     }
 
     final searchQuery = '$queryTitle $artist $suffix'.trim();
@@ -212,11 +239,11 @@ class YoutubeAudioExtractor {
         : searchQuery;
 
     final cached = _videoIdCache[cacheKey];
-    if (cached != null && !cached.isExpired) return cached.videoId;
+    if (cached != null && !cached.isExpired) return cached.videoIds;
 
     final config = await _ensureConfig();
     try {
-      final id = await _searchInnerTube(
+      final ids = await _searchInnerTubeCandidates(
         config,
         searchQuery,
         title: title,
@@ -224,18 +251,18 @@ class YoutubeAudioExtractor {
         targetDuration: targetDuration,
         titleVersion: titleVersion,
       );
-      if (id != null) {
-        _videoIdCache[cacheKey] = _CachedVideoId(id);
+      if (ids.isNotEmpty) {
+        _videoIdCache[cacheKey] = _CachedVideoIds(ids);
       }
-      return id;
+      return ids;
     } catch (e) {
-      _log('searchVideoId failed: $e');
+      _log('searchVideoIds failed: $e');
       // Try a fresh config once.
       if (!_isForced(config)) {
         _config = null;
         try {
           final fresh = await _ensureConfig(forceRefresh: true);
-          final id = await _searchInnerTube(
+          final ids = await _searchInnerTubeCandidates(
             fresh,
             searchQuery,
             title: title,
@@ -243,15 +270,15 @@ class YoutubeAudioExtractor {
             targetDuration: targetDuration,
             titleVersion: titleVersion,
           );
-          if (id != null) {
-            _videoIdCache[cacheKey] = _CachedVideoId(id);
+          if (ids.isNotEmpty) {
+            _videoIdCache[cacheKey] = _CachedVideoIds(ids);
           }
-          return id;
+          return ids;
         } catch (e2) {
           _log('search retry failed: $e2');
         }
       }
-      return null;
+      return const <String>[];
     }
   }
 
@@ -260,14 +287,21 @@ class YoutubeAudioExtractor {
   /// Returns the highest-bitrate adaptive audio stream, falling back to a
   /// progressive muxed stream if necessary. Only streams with a usable URL
   /// (not a cipher requiring JS execution) are returned.
-  Future<({String url, String userAgent})?> getAudioUrl(String videoId) async {
+  Future<({String url, String userAgent})?> getAudioUrl(
+    String videoId, {
+    bool verifyStream = true,
+  }) async {
     final cached = _streamCache[videoId];
     if (cached != null && !cached.isExpired) {
       return (url: cached.url, userAgent: cached.userAgent);
     }
 
     final config = await _ensureConfig();
-    final result = await _tryClients(config, videoId);
+    final result = await _tryClients(
+      config,
+      videoId,
+      verifyStream: verifyStream,
+    );
     if (result != null) return result;
 
     // One retry with a forced config refresh (visitor_data / api key may have
@@ -275,7 +309,11 @@ class YoutubeAudioExtractor {
     if (!_isForced(config)) {
       _config = null;
       final fresh = await _ensureConfig(forceRefresh: true);
-      final result2 = await _tryClients(fresh, videoId);
+      final result2 = await _tryClients(
+        fresh,
+        videoId,
+        verifyStream: verifyStream,
+      );
       if (result2 != null) return result2;
     }
 
@@ -287,17 +325,34 @@ class YoutubeAudioExtractor {
     String artist, {
     Duration? targetDuration,
     String? titleVersion,
+    bool verifyStream = true,
   }) async {
-    final id = await searchVideoId(
+    final ids = await searchVideoIds(
       title,
       artist,
       targetDuration: targetDuration,
       titleVersion: titleVersion,
     );
-    if (id == null) return null;
-    final res = await getAudioUrl(id);
-    if (res == null) return null;
-    return (videoId: id, audioUrl: res.url, userAgent: res.userAgent);
+    for (final id in ids.take(_maxVideoCandidates)) {
+      try {
+        final res = await getAudioUrl(
+          id,
+          verifyStream: verifyStream,
+        ).timeout(
+          _candidateResolveTimeout,
+          onTimeout: () {
+            _log('candidate $id timed out');
+            return null;
+          },
+        );
+        if (res != null) {
+          return (videoId: id, audioUrl: res.url, userAgent: res.userAgent);
+        }
+      } catch (e) {
+        _log('candidate $id failed: $e');
+      }
+    }
+    return null;
   }
 
   // ===========================================================================
@@ -364,7 +419,7 @@ class YoutubeAudioExtractor {
     return body.substring(start, end).replaceAll(r'\u0026', '&');
   }
 
-  Future<String?> _searchInnerTube(
+  Future<List<String>> _searchInnerTubeCandidates(
     _CachedConfig config,
     String query, {
     required String title,
@@ -425,7 +480,7 @@ class YoutubeAudioExtractor {
       );
     }
 
-    if (candidates.isEmpty) return null;
+    if (candidates.isEmpty) return const <String>[];
 
     final normSongTitle = title
         .toLowerCase()
@@ -441,8 +496,7 @@ class YoutubeAudioExtractor {
 
     final targetVariants = _detectVariants('$normSongTitle $normVersion');
 
-    _VideoCandidate? bestCandidate;
-    double bestScore = -999999.0;
+    final scored = <({String id, double score})>[];
 
     for (final candidate in candidates) {
       if (candidate.isLive) continue;
@@ -493,16 +547,18 @@ class YoutubeAudioExtractor {
         if (targetVariants.contains(tag) == candVariants.contains(tag)) {
           score += 15.0; // Both sides agree → small bonus
         } else {
-          score -= _variantPenalties[tag] ?? 350.0; // Weighted by how jarring the mismatch is
+          score -=
+              _variantPenalties[tag] ??
+              350.0; // Weighted by how jarring the mismatch is
         }
       }
 
       // 7. Duration match (tiebreaker, never a trump card)
       if (targetDuration != null && candDuration != null) {
-        final diffSecs =
-            (candDuration.inSeconds - targetDuration.inSeconds).abs();
+        final diffSecs = (candDuration.inSeconds - targetDuration.inSeconds)
+            .abs();
         if (diffSecs <= 4) {
-          score += 80.0;        // ↓ from 150 — duration is a hint, not a trump
+          score += 80.0; // ↓ from 150 — duration is a hint, not a trump
         } else if (diffSecs <= 10) {
           score += 25.0;
         } else if (diffSecs <= 20) {
@@ -514,13 +570,15 @@ class YoutubeAudioExtractor {
         }
       }
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestCandidate = candidate;
-      }
+      scored.add((id: candidate.id, score: score));
     }
 
-    return bestCandidate?.id ?? candidates.first.id;
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    final ranked = <String>[
+      ...scored.map((candidate) => candidate.id),
+      ...candidates.map((candidate) => candidate.id),
+    ];
+    return ranked.toSet().take(_maxVideoCandidates).toList(growable: false);
   }
 
   List<Map<String, dynamic>> _flattenSearchResults(Map<String, dynamic> data) {
@@ -589,9 +647,10 @@ class YoutubeAudioExtractor {
 
   Future<({String url, String userAgent})?> _tryClients(
     _CachedConfig config,
-    String videoId,
-  ) async {
-    final clientsToTry = _clients.toList();
+    String videoId, {
+    required bool verifyStream,
+  }) async {
+    final clientsToTry = _clientsForRuntime();
     if (_lastSuccessfulClient != null) {
       clientsToTry.remove(_lastSuccessfulClient);
       clientsToTry.insert(0, _lastSuccessfulClient!);
@@ -624,13 +683,15 @@ class YoutubeAudioExtractor {
             _log('${client.key}: skipped expired stream URL');
             continue;
           }
-          final playable = await YoutubeStreamHttp.probe(
-            best.url,
-            userAgent: client.userAgent,
-          );
-          if (!playable) {
-            _log('${client.key}: stream probe rejected ${best.label}');
-            continue;
+          if (verifyStream) {
+            final playable = await YoutubeStreamHttp.probe(
+              best.url,
+              userAgent: client.userAgent,
+            );
+            if (!playable) {
+              _log('${client.key}: stream probe rejected ${best.label}');
+              continue;
+            }
           }
           _streamCache[videoId] = _CachedStream(
             best.url,
@@ -645,6 +706,29 @@ class YoutubeAudioExtractor {
       }
     }
     return null;
+  }
+
+  List<_YtClient> _clientsForRuntime() {
+    if (!Platform.isAndroid) return _clients.toList();
+
+    const preferred = <String>[
+      'android',
+      'android_vr',
+      'mweb',
+      'ios',
+      'tv_embedded',
+      'tvhtml5',
+    ];
+
+    final ordered = <_YtClient>[];
+    for (final key in preferred) {
+      final matches = _clients.where((client) => client.key == key);
+      ordered.addAll(matches);
+    }
+    for (final client in _clients) {
+      if (!ordered.contains(client)) ordered.add(client);
+    }
+    return ordered;
   }
 
   Map<String, String> _commonHeaders(_CachedConfig config, _YtClient client) {
@@ -846,55 +930,78 @@ class YoutubeAudioExtractor {
     final tags = <String>{};
 
     // 8D / Spatial audio (most jarring mismatch)
-    if (RegExp(r'\b(8d|16d|spatial\saudio?|binaural|360|surround)\b')
-        .hasMatch(norm)) tags.add('8d');
+    if (RegExp(
+      r'\b(8d|16d|spatial\saudio?|binaural|360|surround)\b',
+    ).hasMatch(norm)) {
+      tags.add('8d');
+    }
 
     // Slowed / Reverb
-    if (RegExp(r'\b(slowed|reverb)\b').hasMatch(norm)) tags.add('slowed_reverb');
+    if (RegExp(r'\b(slowed|reverb)\b').hasMatch(norm)) {
+      tags.add('slowed_reverb');
+    }
 
     // Nightcore / Sped-up
-    if (RegExp(r'\b(nightcore|sped[\s]?up)\b').hasMatch(norm)) tags.add('nightcore');
+    if (RegExp(r'\b(nightcore|sped[\s]?up)\b').hasMatch(norm)) {
+      tags.add('nightcore');
+    }
 
     // Lo-fi
-    if (RegExp(r'\blo[\s]?fi\b').hasMatch(norm)) tags.add('lofi');
+    if (RegExp(r'\blo[\s]?fi\b').hasMatch(norm)) {
+      tags.add('lofi');
+    }
 
     // Instrumental / Karaoke
-    if (RegExp(r'\b(instrumental|karaoke|no\svo[ck]als?|backing\strack)\b')
-        .hasMatch(norm)) tags.add('instrumental');
+    if (RegExp(
+      r'\b(instrumental|karaoke|no\svo[ck]als?|backing\strack)\b',
+    ).hasMatch(norm)) {
+      tags.add('instrumental');
+    }
 
     // Remix / Mashup / Bootleg
-    if (RegExp(r'\b(remix|mashup|bootleg|flip|vip\smix|reedit)\b')
-        .hasMatch(norm)) tags.add('remix');
+    if (RegExp(
+      r'\b(remix|mashup|bootleg|flip|vip\smix|reedit)\b',
+    ).hasMatch(norm)) {
+      tags.add('remix');
+    }
 
     // Live
-    if (RegExp(r'\b(live\b|in\sconcert|live\sat|live\sfrom)\b')
-        .hasMatch(norm)) tags.add('live');
+    if (RegExp(
+      r'\b(live\b|in\sconcert|live\sat|live\sfrom)\b',
+    ).hasMatch(norm)) {
+      tags.add('live');
+    }
 
     // Acoustic / Unplugged
-    if (RegExp(r'\b(acoustic|unplugged)\b').hasMatch(norm)) tags.add('acoustic');
+    if (RegExp(r'\b(acoustic|unplugged)\b').hasMatch(norm)) {
+      tags.add('acoustic');
+    }
 
     // Cover
-    if (RegExp(r'\bcover\b').hasMatch(norm)) tags.add('cover');
+    if (RegExp(r'\bcover\b').hasMatch(norm)) {
+      tags.add('cover');
+    }
 
     // Extended mix
-    if (RegExp(r'\b(extended\s(mix|version)|full\sversion)\b')
-        .hasMatch(norm)) tags.add('extended');
+    if (RegExp(r'\b(extended\s(mix|version)|full\sversion)\b').hasMatch(norm)) {
+      tags.add('extended');
+    }
 
     return tags;
   }
 
   // Penalty weights — higher = more jarring if wrong
   static const Map<String, double> _variantPenalties = {
-    '8d':           700.0,
-    'slowed_reverb':600.0,
-    'nightcore':    600.0,
-    'lofi':         500.0,
+    '8d': 700.0,
+    'slowed_reverb': 600.0,
+    'nightcore': 600.0,
+    'lofi': 500.0,
     'instrumental': 500.0,
-    'remix':        400.0,
-    'cover':        400.0,
-    'live':         300.0,
-    'acoustic':     300.0,
-    'extended':     200.0,
+    'remix': 400.0,
+    'cover': 400.0,
+    'live': 300.0,
+    'acoustic': 300.0,
+    'extended': 200.0,
   };
 }
 
@@ -941,11 +1048,13 @@ class _CachedConfig {
       DateTime.now().difference(fetchedAt) >= YoutubeAudioExtractor._configTtl;
 }
 
-class _CachedVideoId {
-  final String videoId;
+class _CachedVideoIds {
+  final List<String> videoIds;
   final DateTime cachedAt;
 
-  _CachedVideoId(this.videoId) : cachedAt = DateTime.now();
+  _CachedVideoIds(List<String> videoIds)
+    : videoIds = List<String>.unmodifiable(videoIds),
+      cachedAt = DateTime.now();
 
   bool get isExpired =>
       DateTime.now().difference(cachedAt) >= const Duration(hours: 12);

@@ -2,11 +2,12 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/storage/search_providers.dart';
 import '../../core/api/deezer_api_client.dart';
 import '../../core/api/lastfm_providers.dart';
+import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
 import '../../core/storage/recently_played.dart';
 import '../../core/theme/app_theme.dart';
@@ -150,11 +151,16 @@ class _Browse extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 // Results (active query) --------------------------------------------------
 
-class _Results extends ConsumerWidget {
+class _Results extends ConsumerStatefulWidget {
   const _Results();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Results> createState() => _ResultsState();
+}
+
+class _ResultsState extends ConsumerState<_Results> {
+  @override
+  Widget build(BuildContext context) {
     final theme = AppThemeScope.of(context);
     final async = ref.watch(searchResultsProvider);
     return async.when(
@@ -176,7 +182,10 @@ class _Results extends ConsumerWidget {
         onRetry: () => ref.invalidate(searchResultsProvider),
       ),
       data: (r) {
-        if (r.isEmpty) return _EmptyState(theme: theme);
+        if (r.isEmpty) {
+          return _EmptyState(theme: theme);
+        }
+
         return CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: <Widget>[
@@ -190,51 +199,14 @@ class _Results extends ConsumerWidget {
                       track: track,
                       queue: r.tracks,
                       indexInQueue: i,
-                      onTapOverride: () async {
-                        final controls = ref.read(playerControlsProvider);
-                        await controls.playTracks([track]);
-
-                        if (context.mounted) {
-                          ref.read(recentlyPlayedProvider.notifier).push(
-                            RecentEntry(
-                              kind: 'track',
-                              id: track.id,
-                              title: track.title,
-                              subtitle: track.artist?.name,
-                              imageUrl: track.album?.coverMedium ?? track.album?.cover,
-                              atMillis: DateTime.now().millisecondsSinceEpoch,
-                            ),
-                          );
-                        }
-
-                        final artistName = track.artist?.name;
-                        if (artistName == null || artistName.isEmpty) return;
-
-                        final lastfmApi = ref.read(lastfmApiClientProvider);
-                        try {
-                          final similar = await lastfmApi.getSimilarTracks(track.title, artistName);
-                          if (similar.isEmpty) return;
-
-                          final deezerApi = ref.read(deezerApiClientProvider);
-                          int added = 0;
-                          for (final t in similar) {
-                            final tName = t['name'] ?? '';
-                            final tArtist = t['artist'] ?? '';
-                            if (tName.isEmpty || tArtist.isEmpty) continue;
-
-                            try {
-                              final searchRes = await deezerApi.searchTracks('artist:"$tArtist" track:"$tName"');
-                              if (searchRes.isNotEmpty) {
-                                await controls.addToQueueLast(searchRes.first);
-                                added++;
-                                if (added >= 15) break; // Limit related tracks
-                              }
-                            } catch (_) {}
-                          }
-                        } catch (e) {
-                          // ignore errors silently
-                        }
-                      },
+                      onTapOverride: () async => _playSearchTrack(
+                        context,
+                        ref,
+                        track,
+                        r.tracks,
+                        i,
+                        addRelated: true,
+                      ),
                     );
                   },
                   childCount: r.tracks.length > 5 ? 5 : r.tracks.length,
@@ -287,6 +259,66 @@ class _Results extends ConsumerWidget {
       },
     );
   }
+
+  Future<void> _playSearchTrack(
+    BuildContext context,
+    WidgetRef ref,
+    DeezerTrack track,
+    List<DeezerTrack> queue,
+    int index, {
+    required bool addRelated,
+  }) async {
+    final controls = ref.read(playerControlsProvider);
+    await controls.playTracks(queue, startIndex: index);
+
+    if (context.mounted) {
+      ref.read(recentlyPlayedProvider.notifier).push(
+            RecentEntry(
+              kind: 'track',
+              id: track.id,
+              title: track.title,
+              subtitle: track.artist?.name,
+              imageUrl: track.album?.coverMedium ?? track.album?.cover,
+              atMillis: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+    }
+
+    if (!addRelated || _isYoutubeListing(track)) return;
+
+    final artistName = track.artist?.name;
+    if (artistName == null || artistName.isEmpty) return;
+
+    final lastfmApi = ref.read(lastfmApiClientProvider);
+    try {
+      final similar = await lastfmApi.getSimilarTracks(track.title, artistName);
+      if (similar.isEmpty) return;
+
+      final deezerApi = ref.read(deezerApiClientProvider);
+      int added = 0;
+      for (final t in similar) {
+        final tName = t['name'] ?? '';
+        final tArtist = t['artist'] ?? '';
+        if (tName.isEmpty || tArtist.isEmpty) continue;
+
+        try {
+          final searchRes = await deezerApi.searchTracks(
+            'artist:"$tArtist" track:"$tName"',
+          );
+          if (searchRes.isNotEmpty) {
+            await controls.addToQueueLast(searchRes.first);
+            added++;
+            if (added >= 15) break; // Limit related tracks
+          }
+        } catch (_) {}
+      }
+    } catch (_) {
+      // ignore errors silently
+    }
+  }
+
+  bool _isYoutubeListing(DeezerTrack track) =>
+      track.link?.startsWith('wave://youtube') == true || track.id < 0;
 }
 
 class _EmptyState extends StatelessWidget {

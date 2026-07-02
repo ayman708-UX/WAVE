@@ -2,7 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +13,7 @@ import '../../core/utils/playlist_exchange.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/downloads/download_manager.dart';
 import '../../core/downloads/download_providers.dart';
 import '../../core/utils/app_breakpoints.dart';
 import '../../main.dart' show scaffoldMessengerKey;
@@ -949,40 +950,679 @@ class _FollowingTab extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 // Downloads ---------------------------------------------------------------
 
-class _DownloadsTab extends ConsumerWidget {
+class _DownloadsTab extends ConsumerStatefulWidget {
   const _DownloadsTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DownloadsTab> createState() => _DownloadsTabState();
+}
+
+class _DownloadsTabState extends ConsumerState<_DownloadsTab> {
+  late final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final downloaded = ref.watch(downloadedTracksProvider);
-    
-    if (downloaded.isEmpty) {
-      return _EmptyHint(
-        icon: PhosphorIconsRegular.cloudArrowDown,
-        title: 'No downloads',
-        subtitle: 'Downloaded tracks for offline play will appear here.',
-      );
-    }
-    return ListView.builder(
+    final queue = ref.watch(downloadQueueProvider);
+    final filtered = _filterDownloadedTracks(downloaded, _query);
+
+    return ListView(
       physics: const BouncingScrollPhysics(),
-      itemCount: downloaded.length,
-      itemBuilder: (context, i) {
-        final t = downloaded[i];
-        return Stack(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: <Widget>[
+        _DownloadQueueCard(queue: queue),
+        const _DownloadLocationCard(),
+        if (downloaded.isEmpty && !queue.hasItems)
+          _EmptyHint(
+            icon: PhosphorIconsRegular.cloudArrowDown,
+            title: 'No downloads',
+            subtitle: 'Downloaded tracks for offline play will appear here.',
+          )
+        else if (downloaded.isNotEmpty) ...<Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+            child: Text(
+              'Downloaded tracks',
+              style: TextStyle(
+                color: AppThemeScope.of(context).onSurface,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: _DownloadsSearchField(
+              controller: _searchCtrl,
+              onChanged: (value) => setState(() => _query = value),
+              onClear: _query.isEmpty
+                  ? null
+                  : () {
+                      _searchCtrl.clear();
+                      setState(() => _query = '');
+                    },
+            ),
+          ),
+          if (filtered.isEmpty)
+            _EmptyHint(
+              icon: PhosphorIconsRegular.magnifyingGlass,
+              title: 'No downloaded songs found',
+              subtitle: 'Try title, artist, album, or a close spelling.',
+            )
+          else
+            ...List<Widget>.generate(filtered.length, (i) {
+              final t = filtered[i];
+              return _DownloadedTrackTile(
+                track: t,
+                queue: filtered,
+                indexInQueue: i,
+              );
+            }),
+        ],
+      ],
+    );
+  }
+}
+
+List<DeezerTrack> _filterDownloadedTracks(
+  List<DeezerTrack> tracks,
+  String rawQuery,
+) {
+  final query = _normaliseSearch(rawQuery);
+  if (query.isEmpty) return tracks;
+
+  final queryParts = query.split(' ').where((p) => p.isNotEmpty).toList();
+  final scored = <({DeezerTrack track, int score})>[];
+
+  for (final track in tracks) {
+    final haystack = _normaliseSearch(
+      '${track.title} ${track.artist?.name ?? ''} ${track.album?.title ?? ''}',
+    );
+
+    var score = 0;
+    if (haystack.contains(query)) score += 1000;
+
+    for (final part in queryParts) {
+      if (haystack.contains(part)) {
+        score += 120;
+      } else {
+        final words = haystack.split(' ').where((w) => w.isNotEmpty);
+        var best = 999;
+        for (final word in words) {
+          final d = _levenshteinDistance(word, part);
+          if (d < best) best = d;
+        }
+        if (part.length >= 4 && best <= 1) {
+          score += 70;
+        } else if (part.length >= 5 && best <= 2) {
+          score += 45;
+        }
+      }
+    }
+
+    if (score > 0) scored.add((track: track, score: score));
+  }
+
+  scored.sort((a, b) => b.score.compareTo(a.score));
+  return scored.map((item) => item.track).toList(growable: false);
+}
+
+String _normaliseSearch(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+int _levenshteinDistance(String a, String b) {
+  if (a == b) return 0;
+  if (a.isEmpty) return b.length;
+  if (b.isEmpty) return a.length;
+
+  final previous = List<int>.generate(b.length + 1, (i) => i);
+  final current = List<int>.filled(b.length + 1, 0);
+
+  for (var i = 0; i < a.length; i++) {
+    current[0] = i + 1;
+    for (var j = 0; j < b.length; j++) {
+      final cost = a.codeUnitAt(i) == b.codeUnitAt(j) ? 0 : 1;
+      current[j + 1] = <int>[
+        current[j] + 1,
+        previous[j + 1] + 1,
+        previous[j] + cost,
+      ].reduce((x, y) => x < y ? x : y);
+    }
+    for (var j = 0; j < previous.length; j++) {
+      previous[j] = current[j];
+    }
+  }
+
+  return previous[b.length];
+}
+
+class _DownloadsSearchField extends StatelessWidget {
+  const _DownloadsSearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemeScope.of(context);
+
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      style: TextStyle(
+        color: theme.onSurface,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
+      decoration: InputDecoration(
+        hintText: 'Search downloaded songs...',
+        hintStyle: TextStyle(
+          color: theme.onSurfaceMuted,
+          fontWeight: FontWeight.w600,
+        ),
+        prefixIcon: Icon(
+          PhosphorIconsRegular.magnifyingGlass,
+          color: theme.onSurfaceMuted,
+        ),
+        suffixIcon: onClear == null
+            ? null
+            : IconButton(
+                icon: Icon(
+                  PhosphorIconsRegular.x,
+                  color: theme.onSurfaceMuted,
+                ),
+                onPressed: onClear,
+              ),
+        filled: true,
+        fillColor: theme.surface,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 16),
+          borderSide: BorderSide(
+            color: theme.onSurface.withValues(alpha: 0.10),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 16),
+          borderSide: BorderSide(
+            color: theme.onSurface.withValues(alpha: 0.10),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 16),
+          borderSide: BorderSide(
+            color: theme.accent.withValues(alpha: 0.7),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DownloadedTrackTile extends ConsumerWidget {
+  const _DownloadedTrackTile({
+    required this.track,
+    required this.queue,
+    required this.indexInQueue,
+  });
+
+  final DeezerTrack track;
+  final List<DeezerTrack> queue;
+  final int indexInQueue;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = AppThemeScope.of(context);
+    final playlists = ref.watch(playlistsForTrackProvider(track.id));
+    final inPlaylist = playlists.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Stack(
           children: <Widget>[
-            TrackRow(track: t, queue: downloaded, indexInQueue: i),
+            TrackRow(track: track, queue: queue, indexInQueue: indexInQueue),
             Positioned(
               top: 8,
               right: 12,
               child: Icon(
                 PhosphorIconsFill.cloudCheck,
-                color: AppThemeScope.of(context).accent,
+                color: theme.accent,
                 size: 14,
               ),
             ),
           ],
-        );
-      },
+        ),
+        if (inPlaylist)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(72, 0, 16, 6),
+            child: Text(
+              'In playlist: ${_playlistPreview(playlists)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.accent,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(72, 0, 16, 10),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _SmallActionButton(
+              label: inPlaylist ? 'Manage playlists' : 'Add to playlist',
+              icon: PhosphorIconsRegular.playlist,
+              onTap: () => showAddToPlaylistSheet(context, track),
+              filled: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _playlistPreview(List<DeezerPlaylist> playlists) {
+  if (playlists.length <= 2) {
+    return playlists.map((p) => p.title).join(', ');
+  }
+  return '${playlists.take(2).map((p) => p.title).join(', ')} +${playlists.length - 2}';
+}
+
+class _DownloadQueueCard extends ConsumerWidget {
+  const _DownloadQueueCard({required this.queue});
+
+  final DownloadQueueState queue;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!queue.hasItems) return const SizedBox.shrink();
+
+    final theme = AppThemeScope.of(context);
+    final current = queue.current;
+    final progress = queue.overallProgress;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 18),
+        border: Border.all(color: theme.onSurface.withValues(alpha: 0.10)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                queue.running
+                    ? PhosphorIconsRegular.downloadSimple
+                    : PhosphorIconsFill.cloudCheck,
+                color: theme.accent,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  queue.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: progress,
+              backgroundColor: theme.onSurface.withValues(alpha: 0.08),
+              color: theme.accent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Downloaded: ${queue.downloaded} / ${queue.total}   '
+            'Failed: ${queue.failed}   '
+            'Skipped: ${queue.skipped}   '
+            'Waiting: ${queue.waiting}',
+            style: TextStyle(
+              color: theme.onSurfaceMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (current != null) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              'Current: ${current.title} - ${current.status.label}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                minHeight: 5,
+                value: current.status == DownloadItemStatus.resolving
+                    ? null
+                    : current.progress.clamp(0.0, 1.0),
+                backgroundColor: theme.onSurface.withValues(alpha: 0.08),
+                color: theme.accent.withValues(alpha: 0.85),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _currentDownloadDetail(current),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.onSurfaceMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (queue.failed > 0) ...<Widget>[
+            const SizedBox(height: 10),
+            ...queue.items
+                .where((item) => item.status == DownloadItemStatus.failed)
+                .take(3)
+                .map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          PhosphorIconsRegular.warningCircle,
+                          color: theme.onSurfaceMuted,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${item.title}: ${item.error ?? 'Failed'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: theme.onSurfaceMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              if (queue.running)
+                _SmallActionButton(
+                  label: 'Cancel',
+                  icon: PhosphorIconsRegular.x,
+                  onTap: () => ref.read(downloadManagerProvider).cancelQueue(),
+                ),
+              if (!queue.running && (queue.failed > 0 || queue.cancelled > 0))
+                _SmallActionButton(
+                  label: 'Retry failed',
+                  icon: PhosphorIconsRegular.clockCounterClockwise,
+                  onTap: () => ref.read(downloadManagerProvider).retryFailed(),
+                  filled: true,
+                ),
+              if (!queue.running)
+                _SmallActionButton(
+                  label: 'Clear finished',
+                  icon: PhosphorIconsRegular.trash,
+                  onTap: () =>
+                      ref.read(downloadManagerProvider).clearFinishedQueue(),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadLocationCard extends ConsumerWidget {
+  const _DownloadLocationCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = AppThemeScope.of(context);
+    final locationAsync = ref.watch(downloadLocationProvider);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 14),
+        border: Border.all(color: theme.onSurface.withValues(alpha: 0.10)),
+      ),
+      child: locationAsync.when(
+        loading: () => Text(
+          'Finding download folder...',
+          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
+        ),
+        error: (_, _) => Text(
+          'Could not show download folder',
+          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
+        ),
+        data: (path) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Download folder',
+              style: TextStyle(
+                color: theme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              path,
+              style: TextStyle(color: theme.onSurfaceMuted, fontSize: 11),
+            ),
+            if (Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _SmallActionButton(
+                  label: 'Open folder',
+                  icon: PhosphorIconsRegular.export,
+                  onTap: () async {
+                    try {
+                      await ref.read(downloadManagerProvider).openDownloadsFolder();
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(e.toString())),
+                        );
+                      }
+                    }
+                  },
+                  filled: true,
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Android stores these in WAVE app-private storage.',
+                  style: TextStyle(
+                    color: theme.onSurfaceMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+String _currentDownloadDetail(DownloadQueueItem item) {
+  final percent = (item.progress.clamp(0.0, 1.0) * 100).floor();
+
+  if (item.status == DownloadItemStatus.resolving) {
+    return 'Finding playable YouTube audio';
+  }
+
+  if (item.status == DownloadItemStatus.downloading) {
+    final bytes = _formatBytes(item.receivedBytes);
+    final speed = _formatSpeed(item.bytesPerSecond);
+    if (item.totalBytes > 0) {
+      final total = _formatBytes(item.totalBytes);
+      final eta = _etaText(item);
+      return '$percent% · $bytes / $total · $speed$eta';
+    }
+    return '$percent% · $bytes downloaded · $speed';
+  }
+
+  if (item.status == DownloadItemStatus.failed && item.error != null) {
+    return item.error!;
+  }
+
+  return '${item.status.label} · $percent%';
+}
+
+String _formatBytes(int bytes) {
+  if (bytes <= 0) return '0 KB';
+
+  final kb = bytes / 1024;
+  if (kb < 1024) {
+    return '${kb.toStringAsFixed(kb < 100 ? 1 : 0)} KB';
+  }
+
+  final mb = kb / 1024;
+  if (mb < 1024) {
+    return '${mb.toStringAsFixed(mb < 100 ? 1 : 0)} MB';
+  }
+
+  final gb = mb / 1024;
+  return '${gb.toStringAsFixed(2)} GB';
+}
+
+String _formatSpeed(int bytesPerSecond) {
+  if (bytesPerSecond <= 0) return 'starting...';
+  final kb = bytesPerSecond / 1024;
+  if (kb < 1024) {
+    return '${kb.toStringAsFixed(kb < 100 ? 1 : 0)} KB/s';
+  }
+  final mb = kb / 1024;
+  return '${mb.toStringAsFixed(mb < 10 ? 2 : 1)} MB/s';
+}
+
+String _etaText(DownloadQueueItem item) {
+  if (item.totalBytes <= 0 ||
+      item.receivedBytes <= 0 ||
+      item.bytesPerSecond <= 0 ||
+      item.receivedBytes >= item.totalBytes) {
+    return '';
+  }
+
+  final seconds = ((item.totalBytes - item.receivedBytes) / item.bytesPerSecond)
+      .ceil();
+  if (seconds <= 0) return '';
+
+  if (seconds < 60) {
+    return ' · ${seconds}s left';
+  }
+
+  final minutes = (seconds / 60).ceil();
+  return ' · ${minutes}m left';
+}
+
+class _SmallActionButton extends StatelessWidget {
+  const _SmallActionButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemeScope.of(context);
+    final fg = filled ? theme.background : theme.onSurface;
+    final bg = filled ? theme.accent : theme.surface;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: filled
+                ? theme.accent
+                : theme.onSurface.withValues(alpha: 0.12),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

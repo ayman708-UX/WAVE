@@ -2,13 +2,15 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../core/api/models/deezer_album.dart';
 import '../core/api/models/deezer_artist.dart';
 import '../core/api/models/deezer_playlist.dart';
 import '../core/api/models/deezer_track.dart';
 import '../core/audio/player_providers.dart';
+import '../core/downloads/download_providers.dart';
+import '../core/downloads/local_download_matcher.dart';
 import '../core/router/app_router.dart';
 import '../core/storage/recently_played.dart';
 import '../core/theme/app_theme.dart';
@@ -235,6 +237,11 @@ class TrackRow extends ConsumerWidget {
     final cover = track.album?.coverMedium ??
         track.album?.cover ??
         track.album?.coverSmall;
+    final downloadedMatch = LocalDownloadMatcher.findDownloadedMatchInList(
+      track,
+      ref.watch(downloadedTracksProvider),
+    );
+    final onDevice = downloadedMatch != null;
     final placeholder = Container(
       width: 48,
       height: 48,
@@ -318,6 +325,11 @@ class TrackRow extends ConsumerWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (onDevice)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _OnDeviceBadge(theme: theme),
+                    ),
                 ],
               ),
             ),
@@ -332,6 +344,45 @@ class TrackRow extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _OnDeviceBadge extends StatelessWidget {
+  const _OnDeviceBadge({required this.theme});
+
+  final AppTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: theme.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: theme.accent.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            PhosphorIconsFill.cloudCheck,
+            color: theme.accent,
+            size: 11,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'On device',
+            style: TextStyle(
+              color: theme.accent,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
   }

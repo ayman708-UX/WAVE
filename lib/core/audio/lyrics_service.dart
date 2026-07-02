@@ -251,11 +251,13 @@ class TrackLyrics {
 final lyricsForTrackProvider =
     FutureProvider.family<TrackLyrics, DeezerTrack>((ref, track) async {
   final svc = ref.watch(lyricsServiceProvider);
+  final lyricTitle = _lyricsTitle(track);
+  final lyricArtist = _lyricsArtist(track);
   final raw = await svc.getLyrics(
     trackId: track.id,
-    title: track.title,
-    artist: track.artist?.name ?? '',
-    album: track.album?.title,
+    title: lyricTitle,
+    artist: lyricArtist,
+    album: _lyricsAlbum(track),
     duration: track.duration,
   );
   if (raw == null || raw.trim().isEmpty) {
@@ -285,3 +287,51 @@ final lyricsForTrackProvider =
       .toList(growable: false);
   return TrackLyrics(trackId: track.id, lines: plain);
 });
+
+
+bool _isYoutubeLyricsTrack(DeezerTrack track) =>
+    track.link?.startsWith('wave://youtube') == true || track.id < 0;
+
+String _lyricsTitle(DeezerTrack track) {
+  final titleShort = track.titleShort?.trim();
+  if (_isYoutubeLyricsTrack(track) && titleShort != null && titleShort.isNotEmpty) {
+    return _cleanLyricsText(titleShort);
+  }
+  return _cleanLyricsText(track.title);
+}
+
+String _lyricsArtist(DeezerTrack track) {
+  final artist = track.artist?.name.trim() ?? '';
+  if (artist.isNotEmpty && artist.toLowerCase() != 'youtube') {
+    return _cleanLyricsText(artist);
+  }
+
+  // Last resort for YouTube titles like "Artist - Song".
+  if (_isYoutubeLyricsTrack(track)) {
+    final raw = track.titleVersion?.trim() ?? track.title;
+    final parts = raw.split(RegExp(r'\s+[-–—|]\s+'));
+    if (parts.length >= 2 && parts.first.trim().isNotEmpty) {
+      return _cleanLyricsText(parts.first.trim());
+    }
+  }
+  return artist;
+}
+
+String? _lyricsAlbum(DeezerTrack track) {
+  if (_isYoutubeLyricsTrack(track)) return null;
+  return track.album?.title;
+}
+
+String _cleanLyricsText(String value) {
+  return value
+      .replaceAll(RegExp(r'\[[^\]]*\]'), '')
+      .replaceAll(
+        RegExp(
+          r'\((official\s+)?(music\s+)?video\)|\((official\s+)?audio\)|\((official\s+)?lyrics?\)|\((lyric\s+video)\)|\(hd\)|\(4k\)',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .replaceAll(RegExp(r'\s+', multiLine: true), ' ')
+      .trim();
+}

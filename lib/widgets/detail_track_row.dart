@@ -1,10 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../core/api/models/deezer_track.dart';
 import '../core/audio/player_providers.dart';
+import '../core/downloads/download_manager.dart';
+import '../core/downloads/download_providers.dart';
+import '../core/downloads/local_download_matcher.dart';
 import '../core/storage/library_providers.dart';
 import '../core/theme/app_theme.dart';
 import 'context_menu.dart';
@@ -36,12 +39,24 @@ class DetailTrackRow extends ConsumerWidget {
     final liked = ref
         .watch(likedTracksProvider)
         .any((t) => t.id == track.id);
+    // For the manual "Download track" action, use exact Deezer ID only.
+    // Fuzzy matching is still used by playback/local-first, but it must not
+    // block downloading a specific version the user tapped.
+    final downloaded = LocalDownloadMatcher.isDownloadedById(track.id);
+    final downloading = ref.watch(activeDownloadsProvider).containsKey(track.id);
     final cover = track.album?.coverSmall ?? track.album?.cover;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () =>
           ref.read(playerControlsProvider).playTracks(queue, startIndex: indexInQueue),
-      onLongPressStart: (d) => _menu(context, ref, d.globalPosition, liked),
+      onLongPressStart: (d) => _menu(
+        context,
+        ref,
+        d.globalPosition,
+        liked,
+        downloaded,
+        downloading,
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -150,6 +165,8 @@ class DetailTrackRow extends ConsumerWidget {
     WidgetRef ref,
     Offset origin,
     bool liked,
+    bool downloaded,
+    bool downloading,
   ) {
     showWaveContextMenu(
       context: context,
@@ -174,6 +191,24 @@ class DetailTrackRow extends ConsumerWidget {
           label: 'Add to queue',
           onTap: () =>
               ref.read(playerControlsProvider).addToQueueLast(track),
+        ),
+        ContextMenuItem(
+          icon: downloaded
+              ? PhosphorIconsFill.cloudCheck
+              : PhosphorIconsRegular.cloudArrowDown,
+          label: downloading
+              ? 'Downloading...'
+              : (downloaded ? 'Delete download' : 'Download track'),
+          onTap: downloading
+              ? () {}
+              : () {
+                  final manager = ref.read(downloadManagerProvider);
+                  if (downloaded) {
+                    manager.deleteDownload(track.id);
+                  } else {
+                    manager.downloadTrack(track);
+                  }
+                },
         ),
       ],
     );

@@ -41,6 +41,10 @@ class HiveBoxes {
   /// Downloaded track metadata (track json map).
   static const String downloads = 'downloads';
 
+  /// Cached Deezer track id -> YouTube video id matches.
+  /// This reduces repeat YouTube searching on each device.
+  static const String youtubeMatches = 'youtube_matches';
+
   static Future<void> openAll() async {
     await Hive.initFlutter();
     
@@ -57,6 +61,7 @@ class HiveBoxes {
       Hive.openBox<dynamic>(algorithm),
       Hive.openBox<dynamic>(bannedArtists),
       Hive.openBox<dynamic>(downloads),
+      Hive.openBox<dynamic>(youtubeMatches),
     ]);
   }
 }

@@ -1,13 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/api/deezer_providers.dart';
 import '../../core/api/models/deezer_album.dart';
 import '../../core/api/models/deezer_artist.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
+import '../../core/downloads/download_manager.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/content_cards.dart';
@@ -365,6 +366,56 @@ class _ActionRow extends ConsumerWidget {
               await controls.setShuffle(true);
               await controls.playTracks(tracks);
             },
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            final tracks = topAsync.maybeWhen(
+              data: (t) => t.take(10).toList(growable: false),
+              orElse: () => const <DeezerTrack>[],
+            );
+            if (tracks.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Popular tracks are still loading'),
+                ),
+              );
+              return;
+            }
+
+            ref
+                .read(downloadManagerProvider)
+                .queueTracks(
+                  tracks,
+                  title: 'Popular: ${artist.name}',
+                  replaceFinishedQueue: false,
+                );
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Queued popular tracks: ${artist.name}',
+                ),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(
+                  theme.cardRadius == 0 ? 0 : 999),
+              border: Border.all(
+                color: theme.onSurface.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Icon(
+              PhosphorIconsRegular.cloudArrowDown,
+              color: theme.onSurface,
+              size: 16,
+            ),
           ),
         ),
         const SizedBox(width: 10),

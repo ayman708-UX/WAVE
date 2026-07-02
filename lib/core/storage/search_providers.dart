@@ -14,6 +14,7 @@ import '../storage/hive_boxes.dart';
 /// Aggregated search payload returned by [searchResultsProvider].
 class SearchResults {
   const SearchResults({
+    required this.youtubeTracks,
     required this.tracks,
     required this.artists,
     required this.albums,
@@ -21,17 +22,23 @@ class SearchResults {
   });
 
   const SearchResults.empty()
-      : tracks = const <DeezerTrack>[],
+      : youtubeTracks = const <DeezerTrack>[],
+        tracks = const <DeezerTrack>[],
         artists = const <DeezerArtist>[],
         albums = const <DeezerAlbum>[],
         playlists = const <DeezerPlaylist>[];
 
+  /// Playable YouTube results shown under the "YouTube - listing" section.
+  final List<DeezerTrack> youtubeTracks;
+
+  /// Normal Deezer track results.
   final List<DeezerTrack> tracks;
   final List<DeezerArtist> artists;
   final List<DeezerAlbum> albums;
   final List<DeezerPlaylist> playlists;
 
   bool get isEmpty =>
+      youtubeTracks.isEmpty &&
       tracks.isEmpty &&
       artists.isEmpty &&
       albums.isEmpty &&
@@ -70,8 +77,10 @@ class SearchQueryNotifier extends Notifier<String> {
 final searchQueryProvider =
     NotifierProvider<SearchQueryNotifier, String>(SearchQueryNotifier.new);
 
-/// Issues 4 parallel calls (tracks/artists/albums/playlists) for the active
-/// query. Cancels in-flight requests when the query changes.
+/// Issues Deezer search calls only.
+///
+/// Important source-saver fix:
+/// Search is Deezer-only. YouTube must not be touched while typing/searching.
 final searchResultsProvider = FutureProvider<SearchResults>((ref) async {
   final q = ref.watch(searchQueryProvider);
   if (q.isEmpty) return const SearchResults.empty();
@@ -90,6 +99,7 @@ final searchResultsProvider = FutureProvider<SearchResults>((ref) async {
   ]);
 
   return SearchResults(
+    youtubeTracks: const <DeezerTrack>[],
     tracks: results[0] as List<DeezerTrack>,
     artists: results[1] as List<DeezerArtist>,
     albums: results[2] as List<DeezerAlbum>,
@@ -97,8 +107,14 @@ final searchResultsProvider = FutureProvider<SearchResults>((ref) async {
   );
 });
 
-// ---------------------------------------------------------------------------
-// Recent searches (Hive-backed) -------------------------------------------
+/// Disabled in safe-search mode.
+///
+/// Search must never touch YouTube. Deezer search is safe and fast.
+/// Playback/download resolving is handled only when the user explicitly presses
+/// Play or Download.
+final youtubeSearchResultsProvider = FutureProvider<List<DeezerTrack>>((ref) {
+  return Future<List<DeezerTrack>>.value(const <DeezerTrack>[]);
+});
 
 class RecentSearchesNotifier extends Notifier<List<String>> {
   static const String _key = 'queries';

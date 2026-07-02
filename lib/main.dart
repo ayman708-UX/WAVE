@@ -97,7 +97,7 @@ class WaveApp extends ConsumerWidget {
         builder: (context, child) {
           return Stack(
             children: <Widget>[
-              ?child,
+              child ?? const SizedBox.shrink(),
               const Positioned.fill(child: ThemeMorphOverlay()),
             ],
           );
