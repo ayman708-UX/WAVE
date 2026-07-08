@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../core/audio/player_providers.dart';
+import '../../core/auth/supabase_auth_service.dart';
+import '../../core/auth/supabase_profile_service.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/settings_providers.dart';
 import '../../core/theme/app_theme.dart';
@@ -12,6 +14,9 @@ import '../../widgets/snap_horizontal_list.dart';
 import '../../widgets/theme_morph.dart';
 import '../../services/app_updater_service.dart';
 import '../../widgets/update_dialog.dart';
+import 'package:hive/hive.dart';
+import '../../core/storage/hive_boxes.dart';
+import '../../core/storage/library_providers.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -160,65 +165,213 @@ class _Card extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Account ------------------------------------------------------------------
 
-class _AccountSection extends StatelessWidget {
+class _AccountSection extends ConsumerWidget {
   const _AccountSection();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    return _Card(
-      child: Row(
-        children: <Widget>[
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {},
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.accent.withValues(alpha: 0.2),
-                border: Border.all(color: theme.accent, width: 2),
+    final authService = ref.read(supabaseAuthProvider);
+    final isSignedIn = ref.watch(isSignedInProvider);
+    final profileAsync = ref.watch(currentProfileProvider);
+
+    if (!isSignedIn) {
+      return _Card(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => context.push(AppRoutes.auth),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: theme.accent.withValues(alpha: 0.15),
+                  border: Border.all(color: theme.accent.withValues(alpha: 0.4), width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  PhosphorIconsFill.userCircle,
+                  color: theme.accent,
+                  size: 28,
+                ),
               ),
-              alignment: Alignment.center,
-              child: Icon(
-                PhosphorIconsFill.user,
-                color: theme.accent,
-                size: 26,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Guest',
+                      style: TextStyle(
+                        color: theme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Sign in to sync & share',
+                      style: TextStyle(
+                        color: theme.onSurfaceMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'You',
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.accent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Sign In',
                   style: TextStyle(
-                    color: theme.onSurface,
-                    fontSize: 16,
+                    color: theme.background,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Signed-in state
+    final profile = profileAsync.value;
+    final displayName = profile?['display_name'] ?? 'User';
+    final username = profile?['username'] ?? '';
+    final isPublicProfile = profile?['is_public'] == true;
+
+    return Column(
+      children: [
+        _Card(
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: theme.accent.withValues(alpha: 0.2),
+                  border: Border.all(color: theme.accent, width: 2),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                  style: TextStyle(
+                    color: theme.accent,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'local@wave.app',
-                  style: TextStyle(
-                    color: theme.onSurfaceMuted,
-                    fontSize: 12,
-                  ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      displayName,
+                      style: TextStyle(
+                        color: theme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '@$username',
+                      style: TextStyle(
+                        color: theme.onSurfaceMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  await authService.signOut();
+                  // Clear local library so the next user starts fresh
+                  await Hive.box<dynamic>(HiveBoxes.playlists).clear();
+                  await Hive.box<dynamic>(HiveBoxes.playlistTracks).clear();
+                  await Hive.box<dynamic>(HiveBoxes.likedTracks).clear();
+                  await Hive.box<dynamic>(HiveBoxes.likedAlbums).clear();
+                  await Hive.box<dynamic>(HiveBoxes.followedArtists).clear();
+                  await Hive.box<dynamic>(HiveBoxes.likedPlaylists).clear();
+                  
+                  ref.invalidate(currentProfileProvider);
+                  ref.invalidate(userPlaylistsProvider);
+                  ref.invalidate(localPlaylistTracksProvider);
+                  ref.invalidate(likedTracksProvider);
+                  ref.invalidate(likedAlbumsProvider);
+                  ref.invalidate(followedArtistsProvider);
+                  ref.invalidate(likedPlaylistsProvider);
+                },
+                child: Icon(
+                  PhosphorIconsRegular.signOut,
+                  color: theme.onSurfaceMuted,
+                  size: 20,
+                ),
+              ),
+            ],
           ),
-          Icon(
-            PhosphorIconsRegular.caretRight,
-            color: theme.onSurfaceMuted,
-            size: 18,
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          child: Row(
+            children: <Widget>[
+              Icon(
+                isPublicProfile
+                    ? PhosphorIconsRegular.globe
+                    : PhosphorIconsRegular.lock,
+                color: theme.accent,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Public Profile',
+                      style: TextStyle(
+                        color: theme.onSurface,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      isPublicProfile
+                          ? 'Anyone can see your playlists & library'
+                          : 'Your profile is hidden from others',
+                      style: TextStyle(
+                        color: theme.onSurfaceMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: isPublicProfile,
+                activeColor: theme.accent,
+                onChanged: (val) async {
+                  final svc = ref.read(supabaseProfileProvider);
+                  await svc.updateProfile(isPublic: val);
+                  ref.invalidate(currentProfileProvider);
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -767,7 +920,7 @@ class _AboutBlockState extends State<_AboutBlock> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'v1.0.4  ·  Build 5',
+                      'v1.0.5  ·  Build 6',
                       style: TextStyle(
                         color: theme.onSurfaceMuted,
                         fontSize: 12,

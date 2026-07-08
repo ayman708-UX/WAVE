@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
@@ -9,8 +10,12 @@ import '../../core/api/deezer_api_client.dart';
 import '../../core/api/lastfm_providers.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
+import '../../core/auth/community_playlists_provider.dart';
+import '../../core/auth/supabase_profile_service.dart';
+import '../../core/router/app_router.dart';
 import '../../core/storage/recently_played.dart';
 import '../../core/theme/app_theme.dart';
+import '../../widgets/community_playlist_card.dart';
 import '../../widgets/content_cards.dart';
 import '../../widgets/inline_error.dart';
 import '../../widgets/search_bar.dart';
@@ -189,6 +194,14 @@ class _ResultsState extends ConsumerState<_Results> {
         return CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: <Widget>[
+            // WAVE Users section (from Supabase)
+            SliverToBoxAdapter(
+              child: _WaveUsersSection(query: ref.watch(searchQueryProvider)),
+            ),
+            // Community Playlists section (from Supabase)
+            SliverToBoxAdapter(
+              child: _CommunityPlaylistsSearchSection(query: ref.watch(searchQueryProvider)),
+            ),
             if (r.tracks.isNotEmpty) ...<Widget>[
               const SliverToBoxAdapter(child: SectionHeader(title: 'Tracks')),
               SliverList(
@@ -366,6 +379,221 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WAVE Users section -------------------------------------------------------
+
+class _WaveUsersSection extends ConsumerStatefulWidget {
+  const _WaveUsersSection({required this.query});
+  final String query;
+
+  @override
+  ConsumerState<_WaveUsersSection> createState() => _WaveUsersSectionState();
+}
+
+class _WaveUsersSectionState extends ConsumerState<_WaveUsersSection> {
+  List<Map<String, dynamic>> _users = [];
+  bool _searched = false;
+
+  @override
+  void didUpdateWidget(_WaveUsersSection old) {
+    super.didUpdateWidget(old);
+    if (old.query != widget.query) {
+      _search();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _search();
+  }
+
+  Future<void> _search() async {
+    if (widget.query.trim().isEmpty) {
+      setState(() { _users = []; _searched = false; });
+      return;
+    }
+    final svc = ref.read(supabaseProfileProvider);
+    final results = await svc.searchUsers(widget.query);
+    if (mounted) {
+      setState(() { _users = results; _searched = true; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_searched || _users.isEmpty) return const SizedBox.shrink();
+    final theme = AppThemeScope.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(title: 'WAVE Users'),
+        SizedBox(
+          height: 90,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: _users.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, i) {
+              final user = _users[i];
+              return _WaveUserCard(
+                displayName: user['display_name'] ?? 'User',
+                username: user['username'] ?? '',
+                isPublic: user['is_public'] == true,
+                theme: theme,
+                onTap: () {
+                  final userId = user['id'] as String?;
+                  if (userId != null) {
+                    context.push(AppRoutes.userProfilePath(userId));
+                  }
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WaveUserCard extends StatelessWidget {
+  const _WaveUserCard({
+    required this.displayName,
+    required this.username,
+    required this.isPublic,
+    required this.theme,
+    required this.onTap,
+  });
+
+  final String displayName;
+  final String username;
+  final bool isPublic;
+  final AppTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 180,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.surface,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.accent.withValues(alpha: 0.2),
+                border: Border.all(color: theme.accent, width: 1.5),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                style: TextStyle(
+                  color: theme.accent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: TextStyle(
+                      color: theme.onSurface,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '@$username',
+                    style: TextStyle(
+                      color: theme.onSurfaceMuted,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (!isPublic) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(PhosphorIconsRegular.lock, size: 10, color: theme.onSurfaceMuted),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Private',
+                          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Community Playlists Search Section --------------------------------------
+
+class _CommunityPlaylistsSearchSection extends ConsumerWidget {
+  const _CommunityPlaylistsSearchSection({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (query.trim().isEmpty) return const SizedBox.shrink();
+
+    final asyncPlaylists = ref.watch(searchCommunityPlaylistsProvider(query));
+
+    return asyncPlaylists.when(
+      data: (playlists) {
+        if (playlists.isEmpty) return const SizedBox.shrink();
+        
+        return Column(
+          children: [
+            const SectionHeader(title: 'Community Playlists'),
+            SizedBox(
+              height: 198,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: playlists.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, i) {
+                  return CommunityPlaylistCard(communityPlaylist: playlists[i]);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

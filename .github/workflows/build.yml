@@ -30,6 +30,8 @@ jobs:
           echo "DEEZER_PROXY_URL=${{ secrets.DEEZER_PROXY_URL }}" > .env
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" >> .env
           echo "LASTFM_SHARED_SECRET=${{ secrets.LASTFM_SHARED_SECRET }}" >> .env
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
       - run: flutter build windows --release
@@ -78,6 +80,8 @@ jobs:
           echo "DEEZER_PROXY_URL=${{ secrets.DEEZER_PROXY_URL }}" > .env
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" >> .env
           echo "LASTFM_SHARED_SECRET=${{ secrets.LASTFM_SHARED_SECRET }}" >> .env
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
       - run: flutter build linux --release
@@ -145,6 +149,8 @@ jobs:
           echo "DEEZER_PROXY_URL=${{ secrets.DEEZER_PROXY_URL }}" > .env
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" >> .env
           echo "LASTFM_SHARED_SECRET=${{ secrets.LASTFM_SHARED_SECRET }}" >> .env
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
       - run: flutter build macos --release
@@ -198,6 +204,8 @@ jobs:
           echo "DEEZER_PROXY_URL=${{ secrets.DEEZER_PROXY_URL }}" > .env
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" >> .env
           echo "LASTFM_SHARED_SECRET=${{ secrets.LASTFM_SHARED_SECRET }}" >> .env
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: arch -x86_64 flutter pub get
       - run: arch -x86_64 flutter build macos --release
@@ -247,6 +255,8 @@ jobs:
           echo "DEEZER_PROXY_URL=${{ secrets.DEEZER_PROXY_URL }}" > .env
           echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" >> .env
           echo "LASTFM_SHARED_SECRET=${{ secrets.LASTFM_SHARED_SECRET }}" >> .env
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign

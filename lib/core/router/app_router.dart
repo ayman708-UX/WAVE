@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/models/community_playlist.dart';
 import '../../core/api/models/deezer_genre.dart';
 import '../../features/album/album_screen.dart';
 import '../../features/artist/artist_screen.dart';
@@ -9,9 +10,13 @@ import '../../features/discover/genre_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/library/library_screen.dart';
 import '../../features/player/now_playing_screen.dart';
+import '../../features/playlist/community_playlist_screen.dart';
 import '../../features/playlist/playlist_screen.dart';
 import '../../features/search/search_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/auth/auth_screen.dart';
+import '../../features/profile/user_profile_screen.dart';
+import '../../features/playlist/shared_playlist_screen.dart';
 import '../../widgets/app_shell.dart';
 
 /// Route name constants — never hardcode paths at call sites.
@@ -27,11 +32,17 @@ class AppRoutes {
   static const String artist = '/artist/:id';
   static const String album = '/album/:id';
   static const String playlist = '/playlist/:id';
+  static const String communityPlaylist = '/community-playlist';
   static const String genre = '/genre';
+  static const String auth = '/auth';
+  static const String userProfile = '/user/:id';
+  static const String sharedPlaylist = '/shared-playlist/:id';
 
   static String artistPath(int id) => '/artist/$id';
   static String albumPath(int id) => '/album/$id';
   static String playlistPath(int id) => '/playlist/$id';
+  static String userProfilePath(String id) => '/user/$id';
+  static String sharedPlaylistPath(String id) => '/shared-playlist/$id';
 }
 
 /// Shared keys for nested navigators.
@@ -113,6 +124,7 @@ final GoRouter appRouter = GoRouter(
           pageBuilder: (context, state) =>
               _fadePage(key: state.pageKey, child: const HomeScreen()),
         ),
+
         GoRoute(
           path: AppRoutes.discover,
           pageBuilder: (context, state) =>
@@ -174,6 +186,44 @@ final GoRouter appRouter = GoRouter(
             );
           },
         ),
+
+        GoRoute(
+          path: AppRoutes.userProfile,
+          pageBuilder: (context, state) {
+            final userId = state.pathParameters['id'] ?? '';
+            return _fadePage(
+              key: state.pageKey,
+              child: UserProfileScreen(userId: userId),
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.sharedPlaylist,
+          pageBuilder: (context, state) {
+            final playlistId = state.pathParameters['id'] ?? '';
+            return _fadePage(
+              key: state.pageKey,
+              child: SharedPlaylistScreen(playlistId: playlistId),
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.communityPlaylist,
+          pageBuilder: (context, state) {
+            // Retrieve the extra data passed
+            final cp = state.extra as CommunityPlaylist?;
+            if (cp == null) {
+              return _fadePage(
+                key: state.pageKey,
+                child: const Scaffold(body: Center(child: Text('Invalid playlist'))),
+              );
+            }
+            return _fadePage(
+              key: state.pageKey,
+              child: CommunityPlaylistScreen(communityPlaylist: cp),
+            );
+          },
+        ),
       ],
     ),
     GoRoute(
@@ -188,5 +238,12 @@ final GoRouter appRouter = GoRouter(
       pageBuilder: (context, state) =>
           _sheetPage(key: state.pageKey, child: const NowPlayingScreen()),
     ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: AppRoutes.auth,
+      pageBuilder: (context, state) =>
+          _sheetPage(key: state.pageKey, child: const AuthScreen()),
+    ),
+
   ],
 );

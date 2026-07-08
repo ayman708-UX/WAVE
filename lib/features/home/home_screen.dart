@@ -9,12 +9,17 @@ import '../../core/api/deezer_api_client.dart';
 import '../../core/api/models/deezer_album.dart';
 import '../../core/api/models/deezer_artist.dart';
 import '../../core/api/models/deezer_playlist.dart';
+import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
+import '../../core/auth/community_playlists_provider.dart';
+import '../../core/auth/supabase_profile_service.dart';
+import '../../core/downloads/download_manager.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/recently_played.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/app_logger.dart';
 import '../../services/app_updater_service.dart';
+import '../../widgets/community_playlist_card.dart';
 import '../../widgets/content_cards.dart';
 import '../../widgets/context_menu.dart';
 import '../../widgets/section_header.dart';
@@ -23,6 +28,7 @@ import '../../widgets/snap_horizontal_list.dart';
 import '../../widgets/update_dialog.dart';
 import '../../core/api/lastfm_providers.dart';
 import '../../core/api/models/deezer_track.dart';
+import '../../core/auth/supabase_profile_service.dart';
 /// Home tab — 9 sections per spec:
 ///  1. Greeting + settings entry
 ///  2. Quick resume strip (recently played)
@@ -82,6 +88,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SliverToBoxAdapter(child: _EditorialPicksSection()),
           const SliverToBoxAdapter(child: _RecentlyPlayedSection()),
           const SliverToBoxAdapter(child: _RecommendedTracksSection()),
+          const SliverToBoxAdapter(child: _CommunityPlaylistsSection()),
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
@@ -688,6 +695,51 @@ class _RowShimmer extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Community Playlists from WAVE users --------------------------------------
+
+class _CommunityPlaylistsSection extends ConsumerWidget {
+  const _CommunityPlaylistsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncPlaylists = ref.watch(recentCommunityPlaylistsProvider);
+
+    return asyncPlaylists.when(
+      data: (playlists) {
+        if (playlists.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(title: 'Playlists by WAVE users'),
+            SizedBox(
+              height: 198,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: playlists.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, i) {
+                  return CommunityPlaylistCard(communityPlaylist: playlists[i]);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          SectionHeader(title: 'Playlists by WAVE users'),
+          _CoverRowShimmer(),
+        ],
+      ),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

@@ -80,7 +80,11 @@ final relatedArtistsProvider =
 final playlistProvider =
     FutureProvider.family<DeezerPlaylist, int>((ref, id) async {
   if (id < 0) {
-    return ref.watch(userPlaylistsProvider).firstWhere((p) => p.id == id);
+    try {
+      return ref.watch(userPlaylistsProvider).firstWhere((p) => p.id == id);
+    } catch (_) {
+      return ref.watch(likedPlaylistsProvider).firstWhere((p) => p.id == id);
+    }
   }
   return ref.watch(deezerApiClientProvider).getPlaylist(id);
 });

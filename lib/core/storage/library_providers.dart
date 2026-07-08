@@ -8,6 +8,9 @@ import '../api/models/deezer_artist.dart';
 import '../api/models/deezer_playlist.dart';
 import '../api/models/deezer_track.dart';
 import '../api/models/deezer_user.dart';
+import '../auth/supabase_library_sync.dart';
+import '../auth/supabase_auth_service.dart';
+import '../auth/supabase_playlist_sync.dart';
 import 'hive_boxes.dart';
 
 /// Ensures complex models are recursively converted to Maps before Hive storage.
@@ -40,15 +43,19 @@ class LikedTracksNotifier extends Notifier<List<DeezerTrack>> {
     if (isLiked(track.id)) {
       await box.delete(track.id);
       state = state.where((t) => t.id != track.id).toList(growable: false);
+      ref.read(supabaseLibrarySyncProvider).syncTrack(track, isLiked: false);
     } else {
       await box.put(track.id, _deepJson(track.toJson()));
       state = <DeezerTrack>[track, ...state];
+      ref.read(supabaseLibrarySyncProvider).syncTrack(track, isLiked: true);
     }
   }
 
   Future<void> remove(int id) async {
     await Hive.box<dynamic>(HiveBoxes.likedTracks).delete(id);
+    final track = state.firstWhere((t) => t.id == id);
     state = state.where((t) => t.id != id).toList(growable: false);
+    ref.read(supabaseLibrarySyncProvider).syncTrack(track, isLiked: false);
   }
 }
 
@@ -112,9 +119,11 @@ class LikedAlbumsNotifier extends Notifier<List<DeezerAlbum>> {
     if (isLiked(album.id)) {
       await box.delete(album.id);
       state = state.where((a) => a.id != album.id).toList(growable: false);
+      ref.read(supabaseLibrarySyncProvider).syncAlbum(album, isLiked: false);
     } else {
       await box.put(album.id, _deepJson(album.toJson()));
       state = <DeezerAlbum>[album, ...state];
+      ref.read(supabaseLibrarySyncProvider).syncAlbum(album, isLiked: true);
     }
   }
 }
@@ -146,9 +155,11 @@ class LikedPlaylistsNotifier extends Notifier<List<DeezerPlaylist>> {
       await box.delete(key);
       await box.delete(playlist.id);
       state = state.where((p) => p.id != playlist.id).toList(growable: false);
+      ref.read(supabaseLibrarySyncProvider).syncPlaylist(playlist, isLiked: false);
     } else {
       await box.put(key, _deepJson(playlist.toJson()));
       state = <DeezerPlaylist>[playlist, ...state];
+      ref.read(supabaseLibrarySyncProvider).syncPlaylist(playlist, isLiked: true);
     }
   }
 }
@@ -178,9 +189,11 @@ class FollowedArtistsNotifier extends Notifier<List<DeezerArtist>> {
     if (isFollowing(artist.id)) {
       await box.delete(artist.id);
       state = state.where((a) => a.id != artist.id).toList(growable: false);
+      ref.read(supabaseLibrarySyncProvider).syncArtist(artist, isFollowing: false);
     } else {
       await box.put(artist.id, _deepJson(artist.toJson()));
       state = <DeezerArtist>[artist, ...state];
+      ref.read(supabaseLibrarySyncProvider).syncArtist(artist, isFollowing: true);
     }
   }
 }
@@ -225,6 +238,15 @@ class UserPlaylistsNotifier extends Notifier<List<DeezerPlaylist>> {
     );
     await Hive.box<dynamic>(HiveBoxes.playlists).put(id.toString(), _deepJson(pl.toJson()));
     state = <DeezerPlaylist>[pl, ...state];
+    
+    if (ref.read(isSignedInProvider)) {
+      ref.read(supabasePlaylistSyncProvider).syncPlaylist(
+        playlist: pl,
+        tracks: [],
+        isPublic: public,
+      );
+    }
+    
     return pl;
   }
 
@@ -242,9 +264,27 @@ class UserPlaylistsNotifier extends Notifier<List<DeezerPlaylist>> {
   }
 
   Future<void> delete(int id) async {
+    final title = state.firstWhere((p) => p.id == id, orElse: () => const DeezerPlaylist(id: 0, title: '', nbTracks: 0)).title;
+    
     await Hive.box<dynamic>(HiveBoxes.playlists).delete(id.toString());
     await Hive.box<dynamic>(HiveBoxes.playlistTracks).delete(id.toString());
     state = state.where((p) => p.id != id).toList(growable: false);
+
+    if (ref.read(isSignedInProvider) && title.isNotEmpty) {
+      ref.read(supabasePlaylistSyncProvider).deletePlaylist(title);
+    }
+  }
+
+  Future<void> importPlaylist(DeezerPlaylist pl, List<DeezerTrack> tracks) async {
+    if (state.any((p) => p.id == pl.id)) return; // Already imported
+    await Hive.box<dynamic>(HiveBoxes.playlists).put(pl.id.toString(), _deepJson(pl.toJson()));
+    state = <DeezerPlaylist>[pl, ...state];
+    
+    final tracksBox = Hive.box<dynamic>(HiveBoxes.playlistTracks);
+    await tracksBox.put(
+      pl.id.toString(),
+      tracks.map((t) => _deepJson(t.toJson())).toList(),
+    );
   }
 
   Future<void> updatePlaylist(int id, {required String title, String? description}) async {
@@ -262,7 +302,19 @@ class UserPlaylistsNotifier extends Notifier<List<DeezerPlaylist>> {
     
     final box = Hive.box<dynamic>(HiveBoxes.playlists);
     final target = list.firstWhere((p) => p.id == id);
+    final oldTitle = state.firstWhere((p) => p.id == id).title;
+
     await box.put(id.toString(), _deepJson(target.toJson()));
+
+    if (ref.read(isSignedInProvider)) {
+      final tracks = ref.read(localPlaylistTracksProvider)[id] ?? [];
+      ref.read(supabasePlaylistSyncProvider).syncPlaylist(
+        playlist: target,
+        tracks: tracks,
+        isPublic: target.public ?? true,
+        oldTitle: oldTitle != target.title ? oldTitle : null,
+      );
+    }
   }
 }
 
@@ -402,6 +454,14 @@ class LocalPlaylistTracksNotifier extends Notifier<Map<int, List<DeezerTrack>>> 
       playlistId.toString(),
       _deepJson(updatedPl.toJson()),
     );
+
+    if (ref.read(isSignedInProvider)) {
+      ref.read(supabasePlaylistSyncProvider).syncPlaylist(
+        playlist: updatedPl,
+        tracks: tracks,
+        isPublic: updatedPl.public ?? true,
+      );
+    }
   }
 }
 

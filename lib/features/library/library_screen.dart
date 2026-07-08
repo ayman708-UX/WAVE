@@ -23,6 +23,8 @@ import '../../widgets/player/add_to_playlist_sheet.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/sub_tabs.dart';
 import '../../widgets/swipe_action_row.dart';
+import '../../core/auth/supabase_playlist_sync.dart';
+import '../../core/auth/supabase_auth_service.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
@@ -683,6 +685,7 @@ class _PlaylistsTab extends ConsumerWidget {
     final theme = AppThemeScope.of(context);
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
+    bool isPublic = true;
 
     await showGeneralDialog<void>(
       context: context,
@@ -738,6 +741,32 @@ class _PlaylistsTab extends ConsumerWidget {
                       controller: descCtrl,
                       hint: 'Description (optional)',
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Icon(
+                          isPublic ? PhosphorIconsRegular.globe : PhosphorIconsRegular.lock,
+                          color: theme.accent,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            isPublic ? 'Public playlist' : 'Private playlist',
+                            style: TextStyle(
+                              color: theme.onSurface,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: isPublic,
+                          activeColor: theme.accent,
+                          onChanged: (v) => setLocal(() => isPublic = v),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -769,15 +798,23 @@ class _PlaylistsTab extends ConsumerWidget {
                           behavior: HitTestBehavior.opaque,
                           onTap: () async {
                             if (nameCtrl.text.trim().isEmpty) return;
-                            await ref
+                            final pl = await ref
                                 .read(userPlaylistsProvider.notifier)
                                 .create(
                                   title: nameCtrl.text.trim(),
                                   description: descCtrl.text.trim().isEmpty
                                       ? null
                                       : descCtrl.text.trim(),
-                                  public: true,
+                                  public: isPublic,
                                 );
+                            // Sync to Supabase if signed in
+                            if (ref.read(isSignedInProvider)) {
+                              ref.read(supabasePlaylistSyncProvider).syncPlaylist(
+                                playlist: pl,
+                                tracks: const [],
+                                isPublic: isPublic,
+                              );
+                            }
                             if (context.mounted) {
                               Navigator.of(
                                 context,

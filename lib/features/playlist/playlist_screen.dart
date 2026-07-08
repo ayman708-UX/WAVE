@@ -21,7 +21,7 @@ import '../../widgets/detail_track_row.dart';
 import '../../widgets/inline_error.dart';
 import '../../widgets/play_shuffle_pair.dart';
 import '../../widgets/shimmer.dart';
-import '../../widgets/swipe_action_row.dart';
+
 
 class PlaylistScreen extends ConsumerStatefulWidget {
   const PlaylistScreen({super.key, required this.playlistId});
@@ -34,6 +34,8 @@ class PlaylistScreen extends ConsumerStatefulWidget {
 class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   bool _editing = false;
   bool _showCoverViewer = false;
+  bool _selectMode = false;
+  final Set<int> _selectedTrackIds = {};
   late final TextEditingController _titleCtrl = TextEditingController();
   late final TextEditingController _descCtrl = TextEditingController();
 
@@ -198,6 +200,79 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                     orElse: () => const <DeezerTrack>[],
                   ) ?? const <DeezerTrack>[],
                 ),
+                if (_isUserPlaylist) ...[
+                  const SizedBox(height: 10),
+                  if (!_selectMode)
+                    GestureDetector(
+                      onTap: () => setState(() => _selectMode = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: theme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(PhosphorIconsRegular.pencilSimple, color: theme.onSurface, size: 16),
+                            const SizedBox(width: 8),
+                            Text('Edit Tracks', style: TextStyle(color: theme.onSurface, fontSize: 13, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() { _selectMode = false; _selectedTrackIds.clear(); }),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: theme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text('Cancel', style: TextStyle(color: theme.onSurfaceMuted, fontSize: 13, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _selectedTrackIds.isEmpty ? null : () async {
+                              await ref.read(localPlaylistTracksProvider.notifier).removeTracks(widget.playlistId, _selectedTrackIds.toList());
+                              ref.invalidate(playlistProvider(widget.playlistId));
+                              final count = _selectedTrackIds.length;
+                              setState(() { _selectMode = false; _selectedTrackIds.clear(); });
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Removed $count track${count == 1 ? '' : 's'}')),
+                                );
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedTrackIds.isEmpty ? theme.error.withValues(alpha: 0.3) : theme.error,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                _selectedTrackIds.isEmpty ? 'Select tracks' : 'Remove (${_selectedTrackIds.length})',
+                                style: TextStyle(
+                                  color: _selectedTrackIds.isEmpty ? theme.error : theme.background,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
                 const SizedBox(height: 12),
               ],
             ),
@@ -690,33 +765,39 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         return Material(
           key: ValueKey<String>('playlist_${widget.playlistId}_${track.id}'),
           color: theme.background,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              SwipeActionRow(
-                trailingIcon: PhosphorIconsRegular.trash,
-                trailingColor: theme.error,
-                trailingLabel: 'Remove',
-                onTrailing: () => _removeTrackFromPlaylist(track),
+          child: Row(
+            children: [
+              if (_selectMode)
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      if (_selectedTrackIds.contains(track.id)) {
+                        _selectedTrackIds.remove(track.id);
+                      } else {
+                        _selectedTrackIds.add(track.id);
+                      }
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Icon(
+                      _selectedTrackIds.contains(track.id)
+                          ? PhosphorIconsFill.checkCircle
+                          : PhosphorIconsRegular.circle,
+                      color: _selectedTrackIds.contains(track.id)
+                          ? theme.accent
+                          : theme.onSurfaceMuted,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              Expanded(
                 child: DetailTrackRow(
                   track: track,
                   queue: tracks,
                   indexInQueue: i,
                   position: i + 1,
-                  dragHandle: true,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _PillButton(
-                    label: 'REMOVE FROM PLAYLIST',
-                    background: theme.error.withValues(alpha: 0.10),
-                    border: theme.error.withValues(alpha: 0.65),
-                    color: theme.error,
-                    onTap: () => _removeTrackFromPlaylist(track),
-                  ),
+                  dragHandle: !_selectMode,
                 ),
               ),
             ],
@@ -724,7 +805,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         );
       },
       itemCount: tracks.length,
-      onReorder: (oldIndex, newIndex) {
+      onReorder: _selectMode ? (_, __) {} : (oldIndex, newIndex) {
         ref.read(localPlaylistTracksProvider.notifier).reorderTrack(
               widget.playlistId,
               oldIndex,
