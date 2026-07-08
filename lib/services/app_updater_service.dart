@@ -8,25 +8,30 @@ import 'package:url_launcher/url_launcher.dart';
 
 class AppUpdaterService {
   static const String githubRepo = 'ayman708-UX/WAVE';
-  static const String githubApiUrl = 'https://api.github.com/repos/$githubRepo/releases/latest';
-  
+  static const String githubApiUrl =
+      'https://api.github.com/repos/$githubRepo/releases/latest';
+
   Future<UpdateInfo?> checkForUpdates() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
-      
+
       final response = await http.get(Uri.parse(githubApiUrl));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final latestVersion = (data['tag_name'] as String).replaceFirst('v', '');
-        final releaseNotes = data['body'] as String? ?? 'No release notes available';
+        final latestVersion = (data['tag_name'] as String).replaceFirst(
+          'v',
+          '',
+        );
+        final releaseNotes =
+            data['body'] as String? ?? 'No release notes available';
         final publishedAt = DateTime.parse(data['published_at']);
-        
+
         if (_isNewerVersion(currentVersion, latestVersion)) {
           final assets = data['assets'] as List;
           final downloadUrl = _findAssetForPlatform(assets);
-          
+
           return UpdateInfo(
             currentVersion: currentVersion,
             latestVersion: latestVersion,
@@ -63,9 +68,9 @@ class AppUpdaterService {
 
   /// Android: match arm64-v8a, armeabi-v7a, x86_64, or fall back to universal
   String? _findAndroidAsset(List assets, Abi abi) {
-    final apks = assets.where(
-      (a) => (a['name'] as String).toLowerCase().endsWith('.apk'),
-    ).toList();
+    final apks = assets
+        .where((a) => (a['name'] as String).toLowerCase().endsWith('.apk'))
+        .toList();
 
     if (apks.isEmpty) return null;
 
@@ -87,9 +92,9 @@ class AppUpdaterService {
 
     // Try to find an APK matching our architecture
     for (final keyword in archKeywords) {
-      final match = apks.where(
-        (a) => (a['name'] as String).toLowerCase().contains(keyword),
-      ).firstOrNull;
+      final match = apks
+          .where((a) => (a['name'] as String).toLowerCase().contains(keyword))
+          .firstOrNull;
       if (match != null) {
         debugPrint('Matched APK for $abi: ${match['name']}');
         return match['browser_download_url'];
@@ -97,9 +102,9 @@ class AppUpdaterService {
     }
 
     // Fall back to a "universal" APK if available
-    final universal = apks.where(
-      (a) => (a['name'] as String).toLowerCase().contains('universal'),
-    ).firstOrNull;
+    final universal = apks
+        .where((a) => (a['name'] as String).toLowerCase().contains('universal'))
+        .firstOrNull;
     if (universal != null) {
       debugPrint('Falling back to universal APK: ${universal['name']}');
       return universal['browser_download_url'];
@@ -111,18 +116,19 @@ class AppUpdaterService {
       return apks.first['browser_download_url'];
     }
 
-    debugPrint('No matching APK found for $abi among ${apks.map((a) => a['name']).toList()}');
+    debugPrint(
+      'No matching APK found for $abi among ${apks.map((a) => a['name']).toList()}',
+    );
     return null;
   }
 
   /// Windows: match x64 or arm64 installer
   String? _findWindowsAsset(List assets, Abi abi) {
-    final windowsAssets = assets.where(
-      (a) {
-        final name = (a['name'] as String).toLowerCase();
-        return name.contains('windows') && (name.endsWith('.exe') || name.endsWith('.msix'));
-      },
-    ).toList();
+    final windowsAssets = assets.where((a) {
+      final name = (a['name'] as String).toLowerCase();
+      return name.contains('windows') &&
+          (name.endsWith('.exe') || name.endsWith('.msix'));
+    }).toList();
 
     if (windowsAssets.isEmpty) return null;
 
@@ -140,9 +146,9 @@ class AppUpdaterService {
     }
 
     for (final keyword in archKeywords) {
-      final match = windowsAssets.where(
-        (a) => (a['name'] as String).toLowerCase().contains(keyword),
-      ).firstOrNull;
+      final match = windowsAssets
+          .where((a) => (a['name'] as String).toLowerCase().contains(keyword))
+          .firstOrNull;
       if (match != null) return match['browser_download_url'];
     }
 
@@ -152,13 +158,13 @@ class AppUpdaterService {
 
   /// Linux: match x64 or arm64 AppImage/deb
   String? _findLinuxAsset(List assets, Abi abi) {
-    final linuxAssets = assets.where(
-      (a) {
-        final name = (a['name'] as String).toLowerCase();
-        return name.contains('linux') &&
-            (name.endsWith('.appimage') || name.endsWith('.deb') || name.endsWith('.tar.gz'));
-      },
-    ).toList();
+    final linuxAssets = assets.where((a) {
+      final name = (a['name'] as String).toLowerCase();
+      return name.contains('linux') &&
+          (name.endsWith('.appimage') ||
+              name.endsWith('.deb') ||
+              name.endsWith('.tar.gz'));
+    }).toList();
 
     if (linuxAssets.isEmpty) return null;
 
@@ -176,34 +182,40 @@ class AppUpdaterService {
     }
 
     for (final keyword in archKeywords) {
-      final match = linuxAssets.where(
-        (a) => (a['name'] as String).toLowerCase().contains(keyword),
-      ).firstOrNull;
+      final match = linuxAssets
+          .where((a) => (a['name'] as String).toLowerCase().contains(keyword))
+          .firstOrNull;
       if (match != null) return match['browser_download_url'];
     }
 
     // Fallback to first Linux asset
     return linuxAssets.first['browser_download_url'];
   }
-  
+
   bool _isNewerVersion(String current, String latest) {
     // Strip any suffix like "-test" or "-beta" for comparison
     final currentClean = current.split('-').first;
     final latestClean = latest.split('-').first;
 
-    final currentParts = currentClean.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    final latestParts = latestClean.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    
+    final currentParts = currentClean
+        .split('.')
+        .map((p) => int.tryParse(p) ?? 0)
+        .toList();
+    final latestParts = latestClean
+        .split('.')
+        .map((p) => int.tryParse(p) ?? 0)
+        .toList();
+
     for (int i = 0; i < 3; i++) {
       final currentPart = i < currentParts.length ? currentParts[i] : 0;
       final latestPart = i < latestParts.length ? latestParts[i] : 0;
-      
+
       if (latestPart > currentPart) return true;
       if (latestPart < currentPart) return false;
     }
     return false;
   }
-  
+
   Future<void> openDownloadPage(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
@@ -220,7 +232,7 @@ class UpdateInfo {
   final DateTime publishedAt;
   final bool isMacOS;
   final bool isIOS;
-  
+
   UpdateInfo({
     required this.currentVersion,
     required this.latestVersion,

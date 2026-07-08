@@ -45,8 +45,7 @@ class AlbumScreen extends ConsumerWidget {
           data: (album) => _AlbumBody(
             album: album,
             tracksAsync: tracksAsync,
-            onRetryTracks: () =>
-                ref.invalidate(albumTracksProvider(albumId)),
+            onRetryTracks: () => ref.invalidate(albumTracksProvider(albumId)),
           ),
         ),
       ),
@@ -68,11 +67,13 @@ class _AlbumBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    final saved =
-        ref.watch(likedAlbumsProvider).any((a) => a.id == album.id);
+    final saved = ref.watch(likedAlbumsProvider).any((a) => a.id == album.id);
     final downloadableTracks = tracksAsync.maybeWhen(
       data: (t) => t
-          .map((track) => track.album == null ? track.copyWith(album: album) : track)
+          .map(
+            (track) =>
+                track.album == null ? track.copyWith(album: album) : track,
+          )
           .toList(growable: false),
       orElse: () => const <DeezerTrack>[],
     );
@@ -80,16 +81,12 @@ class _AlbumBody extends ConsumerWidget {
       downloadableTracks,
       ref.watch(downloadedTracksProvider),
     );
-    final cover = album.coverXl ??
-        album.coverBig ??
-        album.coverMedium ??
-        album.cover;
+    final cover =
+        album.coverXl ?? album.coverBig ?? album.coverMedium ?? album.cover;
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: <Widget>[
-        SliverToBoxAdapter(
-          child: _Header(theme: theme),
-        ),
+        SliverToBoxAdapter(child: _Header(theme: theme)),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -151,10 +148,7 @@ class _AlbumBody extends ConsumerWidget {
                 const SizedBox(height: 6),
                 Text(
                   _meta(album),
-                  style: TextStyle(
-                    color: theme.onSurfaceMuted,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
                 ),
                 const SizedBox(height: 18),
                 Row(
@@ -167,9 +161,7 @@ class _AlbumBody extends ConsumerWidget {
                             orElse: () => const <DeezerTrack>[],
                           );
                           if (tracks.isNotEmpty) {
-                            ref
-                                .read(playerControlsProvider)
-                                .playTracks(tracks);
+                            ref.read(playerControlsProvider).playTracks(tracks);
                           }
                         },
                         onShuffle: () async {
@@ -187,15 +179,15 @@ class _AlbumBody extends ConsumerWidget {
                     const SizedBox(width: 10),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => ref
-                          .read(likedAlbumsProvider.notifier)
-                          .toggle(album),
+                      onTap: () =>
+                          ref.read(likedAlbumsProvider.notifier).toggle(album),
                       child: Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: Colors.transparent,
                           borderRadius: BorderRadius.circular(
-                              theme.cardRadius == 0 ? 0 : 999),
+                            theme.cardRadius == 0 ? 0 : 999,
+                          ),
                           border: Border.all(
                             color: saved
                                 ? theme.accent
@@ -219,12 +211,16 @@ class _AlbumBody extends ConsumerWidget {
                         if (albumCoverage.allOnDevice) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Album is already on device: ${album.title}'),
+                              content: Text(
+                                'Album is already on device: ${album.title}',
+                              ),
                             ),
                           );
                           return;
                         }
-                        ref.read(downloadManagerProvider).queueTracks(
+                        ref
+                            .read(downloadManagerProvider)
+                            .queueTracks(
                               albumCoverage.missingTracks,
                               title: albumCoverage.partiallyOnDevice
                                   ? 'Missing album tracks: ${album.title}'
@@ -246,7 +242,8 @@ class _AlbumBody extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: Colors.transparent,
                           borderRadius: BorderRadius.circular(
-                              theme.cardRadius == 0 ? 0 : 999),
+                            theme.cardRadius == 0 ? 0 : 999,
+                          ),
                           border: Border.all(
                             color: albumCoverage.allOnDevice
                                 ? theme.accent
@@ -277,7 +274,9 @@ class _AlbumBody extends ConsumerWidget {
               delegate: SliverChildBuilderDelegate(
                 (context, _) => Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   child: ShimmerBox(
                     width: MediaQuery.of(context).size.width - 32,
                     height: 40,
@@ -407,10 +406,8 @@ class _MoreFromArtist extends ConsumerWidget {
               error: (_, _) => const SizedBox.shrink(),
               data: (albums) => SnapHorizontalList(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemBuilder: (context, i) => SizedBox(
-                  width: 140,
-                  child: AlbumCard(album: albums[i]),
-                ),
+                itemBuilder: (context, i) =>
+                    SizedBox(width: 140, child: AlbumCard(album: albums[i])),
                 itemCount: albums.length,
                 itemExtent: 140,
                 spacing: 12,
@@ -434,10 +431,7 @@ class _Loading extends StatelessWidget {
         children: <Widget>[
           const Center(child: ShimmerSquare(size: 200)),
           const SizedBox(height: 16),
-          ShimmerBox(
-            width: MediaQuery.of(context).size.width - 48,
-            height: 24,
-          ),
+          ShimmerBox(width: MediaQuery.of(context).size.width - 48, height: 24),
           const SizedBox(height: 8),
           ShimmerBox(
             width: (MediaQuery.of(context).size.width - 48) * 0.6,

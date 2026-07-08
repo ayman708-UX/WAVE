@@ -37,27 +37,22 @@ class DetailTrackRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    final liked = ref
-        .watch(likedTracksProvider)
-        .any((t) => t.id == track.id);
+    final liked = ref.watch(likedTracksProvider).any((t) => t.id == track.id);
     final downloaded = isTrackOnDevice(
       track,
       ref.watch(downloadedTracksProvider),
     );
-    final downloading = ref.watch(activeDownloadsProvider).containsKey(track.id);
+    final downloading = ref
+        .watch(activeDownloadsProvider)
+        .containsKey(track.id);
     final cover = track.album?.coverSmall ?? track.album?.cover;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () =>
-          ref.read(playerControlsProvider).playTracks(queue, startIndex: indexInQueue),
-      onLongPressStart: (d) => _menu(
-        context,
-        ref,
-        d.globalPosition,
-        liked,
-        downloaded,
-        downloading,
-      ),
+      onTap: () => ref
+          .read(playerControlsProvider)
+          .playTracks(queue, startIndex: indexInQueue),
+      onLongPressStart: (d) =>
+          _menu(context, ref, d.globalPosition, liked, downloaded, downloading),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -78,7 +73,9 @@ class DetailTrackRow extends ConsumerWidget {
             ),
             if (showArtist) ...<Widget>[
               ClipRRect(
-                borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 4),
+                borderRadius: BorderRadius.circular(
+                  theme.cardRadius == 0 ? 0 : 4,
+                ),
                 child: SizedBox(
                   width: 40,
                   height: 40,
@@ -141,9 +138,7 @@ class DetailTrackRow extends ConsumerWidget {
               style: TextStyle(
                 color: theme.onSurfaceMuted,
                 fontSize: 12,
-                fontFeatures: const <FontFeature>[
-                  FontFeature.tabularFigures(),
-                ],
+                fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
               ),
             ),
             if (dragHandle) ...<Widget>[
@@ -151,7 +146,10 @@ class DetailTrackRow extends ConsumerWidget {
               ReorderableDragStartListener(
                 index: indexInQueue,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   child: Icon(
                     PhosphorIconsRegular.dotsSixVertical,
                     color: theme.onSurfaceMuted,
@@ -179,24 +177,19 @@ class DetailTrackRow extends ConsumerWidget {
       origin: origin,
       items: <ContextMenuItem>[
         ContextMenuItem(
-          icon: liked
-              ? PhosphorIconsFill.heart
-              : PhosphorIconsRegular.heart,
+          icon: liked ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
           label: liked ? 'Remove from liked' : 'Add to liked',
-          onTap: () =>
-              ref.read(likedTracksProvider.notifier).toggle(track),
+          onTap: () => ref.read(likedTracksProvider.notifier).toggle(track),
         ),
         ContextMenuItem(
           icon: PhosphorIconsRegular.queue,
           label: 'Play next',
-          onTap: () =>
-              ref.read(playerControlsProvider).addToQueueNext(track),
+          onTap: () => ref.read(playerControlsProvider).addToQueueNext(track),
         ),
         ContextMenuItem(
           icon: PhosphorIconsRegular.playlist,
           label: 'Add to queue',
-          onTap: () =>
-              ref.read(playerControlsProvider).addToQueueLast(track),
+          onTap: () => ref.read(playerControlsProvider).addToQueueLast(track),
         ),
         ContextMenuItem(
           icon: downloaded

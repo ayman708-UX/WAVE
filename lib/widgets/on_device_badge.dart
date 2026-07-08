@@ -4,11 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../core/theme/app_theme.dart';
 
 class OnDeviceBadge extends StatelessWidget {
-  const OnDeviceBadge({
-    super.key,
-    required this.theme,
-    this.compact = false,
-  });
+  const OnDeviceBadge({super.key, required this.theme, this.compact = false});
 
   final AppTheme theme;
   final bool compact;

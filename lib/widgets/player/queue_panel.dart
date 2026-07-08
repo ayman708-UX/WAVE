@@ -24,9 +24,7 @@ class QueuePanel extends ConsumerWidget {
       decoration: BoxDecoration(
         color: theme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(
-          color: theme.onSurface.withValues(alpha: 0.06),
-        ),
+        border: Border.all(color: theme.onSurface.withValues(alpha: 0.06)),
       ),
       child: Column(
         children: <Widget>[
@@ -62,16 +60,25 @@ class QueuePanel extends ConsumerWidget {
                 FilledButton.icon(
                   onPressed: () => controls.toggleRelatedMode(),
                   icon: Icon(
-                    queue.isRelatedMode ? PhosphorIconsRegular.queue : PhosphorIconsRegular.radio,
+                    queue.isRelatedMode
+                        ? PhosphorIconsRegular.queue
+                        : PhosphorIconsRegular.radio,
                     size: 16,
                   ),
                   label: Text(
                     queue.isRelatedMode ? 'Back to Queue' : 'Play Related',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: queue.isRelatedMode ? theme.surface : theme.accent,
-                    foregroundColor: queue.isRelatedMode ? theme.onSurface : theme.background,
+                    backgroundColor: queue.isRelatedMode
+                        ? theme.surface
+                        : theme.accent,
+                    foregroundColor: queue.isRelatedMode
+                        ? theme.onSurface
+                        : theme.background,
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
@@ -86,9 +93,7 @@ class QueuePanel extends ConsumerWidget {
               ],
             ),
           ),
-          Expanded(
-            child: _QueueList(queue: queue),
-          ),
+          Expanded(child: _QueueList(queue: queue)),
         ],
       ),
     );
@@ -140,7 +145,10 @@ class _QueueList extends ConsumerWidget {
                 trailing: ReorderableDragStartListener(
                   index: i,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     child: Icon(
                       PhosphorIconsRegular.dotsSixVertical,
                       color: theme.onSurfaceMuted,
@@ -158,25 +166,27 @@ class _QueueList extends ConsumerWidget {
             child: _Header(text: 'History', color: theme.onSurfaceMuted),
           ),
         SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, i) {
-              final reversedIndex = queue.history.length - 1 - i;
-              return _QueueRow(
-                track: queue.history[reversedIndex],
-                highlighted: false,
-                onTap: () => controls.skipToHistory(reversedIndex),
-                dim: true,
-              );
-            },
-            childCount: queue.history.length,
-          ),
+          delegate: SliverChildBuilderDelegate((context, i) {
+            final reversedIndex = queue.history.length - 1 - i;
+            return _QueueRow(
+              track: queue.history[reversedIndex],
+              highlighted: false,
+              onTap: () => controls.skipToHistory(reversedIndex),
+              dim: true,
+            );
+          }, childCount: queue.history.length),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
     );
   }
 
-  void _menu(BuildContext context, WidgetRef ref, DeezerTrack t, Offset origin) {
+  void _menu(
+    BuildContext context,
+    WidgetRef ref,
+    DeezerTrack t,
+    Offset origin,
+  ) {
     showWaveContextMenu(
       context: context,
       origin: origin,

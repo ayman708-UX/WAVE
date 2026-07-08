@@ -33,7 +33,7 @@ Future<void> main() async {
   await DeezerApiClient.loadEnv();
   await LastfmApiClient.loadEnv();
   await DeezerApiClient.checkGeoRestriction();
-  
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
@@ -73,9 +73,7 @@ Future<void> main() async {
       overrides: [
         // Real audio backend: resolves YouTube audio for each Deezer track
         // (search "title + artist + lyrics") then streams via media_kit (libmpv).
-        musicPlayerServiceProvider.overrideWith(
-          (ref) => _playerService,
-        ),
+        musicPlayerServiceProvider.overrideWith((ref) => _playerService),
       ],
       child: const WaveApp(),
     ),

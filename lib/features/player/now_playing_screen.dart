@@ -14,6 +14,7 @@ import '../../core/audio/player_providers.dart';
 import '../../core/audio/sleep_timer.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/library_providers.dart';
+import '../../core/api/deezer_api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/player/heart_like_button.dart';
 import '../../widgets/player/lyrics_view.dart';
@@ -38,7 +39,6 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   bool _showLyrics = false;
-
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +88,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
-  Widget _buildBackground(AppTheme theme, DeezerTrack track, PlayerState player) {
+  Widget _buildBackground(
+    AppTheme theme,
+    DeezerTrack track,
+    PlayerState player,
+  ) {
     final cover = track.album?.coverXl ?? track.album?.coverBig;
     switch (theme.id) {
       case AppThemeId.vapor:
@@ -105,10 +109,19 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                       key: ValueKey(cover),
                       imageUrl: cover,
                       fit: BoxFit.cover,
-                      placeholder: (_, _) => ColoredBox(key: ValueKey('ph_$cover'), color: theme.background),
-                      errorWidget: (_, _, _) => ColoredBox(key: ValueKey('err_$cover'), color: theme.background),
+                      placeholder: (_, _) => ColoredBox(
+                        key: ValueKey('ph_$cover'),
+                        color: theme.background,
+                      ),
+                      errorWidget: (_, _, _) => ColoredBox(
+                        key: ValueKey('err_$cover'),
+                        color: theme.background,
+                      ),
                     )
-                  : ColoredBox(key: const ValueKey('empty_bg'), color: theme.background),
+                  : ColoredBox(
+                      key: const ValueKey('empty_bg'),
+                      color: theme.background,
+                    ),
             ),
             BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
@@ -167,7 +180,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               if (t != null) {
                 showWaveSheet<void>(
                   context: context,
-                  builder: (_) => MoreOptionsSheet(track: t, isFromNowPlaying: true),
+                  builder: (_) =>
+                      MoreOptionsSheet(track: t, isFromNowPlaying: true),
                 );
               }
             },
@@ -223,8 +237,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           key: ValueKey(cover),
                           imageUrl: cover,
                           fit: BoxFit.cover,
-                          placeholder: (_, _) =>
-                              ColoredBox(key: ValueKey('ph_$cover'), color: theme.surface),
+                          placeholder: (_, _) => ColoredBox(
+                            key: ValueKey('ph_$cover'),
+                            color: theme.surface,
+                          ),
                           errorWidget: (_, _, _) => Container(
                             key: ValueKey('err_$cover'),
                             color: theme.surface,
@@ -235,7 +251,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             ),
                           ),
                         )
-                      : ColoredBox(key: const ValueKey('empty_cover'), color: theme.surface),
+                      : ColoredBox(
+                          key: const ValueKey('empty_cover'),
+                          color: theme.surface,
+                        ),
                 ),
               ),
               if (theme.id == AppThemeId.neonGrid)
@@ -278,16 +297,17 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 child: AnimatedSwitcher(
                   duration: player.transitionDuration,
                   reverseDuration: player.transitionDuration,
-                  layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
-                    return Stack(
-                      alignment: Alignment.centerLeft,
-                      children: <Widget>[
-                        ...previousChildren,
-                        // ignore: use_null_aware_elements
-                        if (currentChild != null) currentChild,
-                      ],
-                    );
-                  },
+                  layoutBuilder:
+                      (Widget? currentChild, List<Widget> previousChildren) {
+                        return Stack(
+                          alignment: Alignment.centerLeft,
+                          children: <Widget>[
+                            ...previousChildren,
+                            // ignore: use_null_aware_elements
+                            if (currentChild != null) currentChild,
+                          ],
+                        );
+                      },
                   child: Column(
                     key: ValueKey('text_${track.id}'),
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,11 +325,21 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                       ),
                       const SizedBox(height: 4),
                       GestureDetector(
-                        onTap: () {
-                          final id = track.artist?.id;
-                          if (id != null) {
-                            context.pop();
-                            context.push(AppRoutes.artistPath(id));
+                        onTap: () async {
+                          var id = track.artist?.id;
+                          if (id == null || id == 0) {
+                            try {
+                              final fullTrack = await ref
+                                  .read(deezerApiClientProvider)
+                                  .getTrack(track.id);
+                              id = fullTrack.artist?.id;
+                            } catch (_) {}
+                          }
+                          if (id != null && id != 0) {
+                            if (context.mounted) {
+                              context.pop();
+                              context.push(AppRoutes.artistPath(id));
+                            }
                           }
                         },
                         child: Text(
@@ -393,8 +423,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               ),
               PlayPauseButton(
                 isPlaying: player.status == PlaybackStatus.playing,
-                onTap: () =>
-                    ref.read(playerControlsProvider).togglePlayPause(),
+                onTap: () => ref.read(playerControlsProvider).togglePlayPause(),
                 size: switch (theme.id) {
                   AppThemeId.brutalist => 60,
                   AppThemeId.minimalMono => 56,
@@ -414,7 +443,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     ? PhosphorIconsRegular.repeatOnce
                     : PhosphorIconsRegular.repeat,
                 active: player.repeat != ps.RepeatMode.off,
-                onTap: () => ref.read(playerControlsProvider).setRepeat(
+                onTap: () => ref
+                    .read(playerControlsProvider)
+                    .setRepeat(
                       ps.RepeatMode.values[(player.repeat.index + 1) %
                           ps.RepeatMode.values.length],
                     ),
@@ -429,7 +460,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             runSpacing: 0,
             children: <Widget>[
               _BottomTextButton(
-                icon: queue.isRelatedMode ? PhosphorIconsRegular.radio : PhosphorIconsRegular.queue,
+                icon: queue.isRelatedMode
+                    ? PhosphorIconsRegular.radio
+                    : PhosphorIconsRegular.queue,
                 label: queue.isRelatedMode ? 'RELATED' : 'QUEUE',
                 onTap: () => showWaveSheet<void>(
                   context: context,
@@ -491,8 +524,8 @@ class _DesktopVolumeSlider extends ConsumerWidget {
               isMuted
                   ? PhosphorIconsFill.speakerX
                   : player.volume < 0.5
-                      ? PhosphorIconsFill.speakerLow
-                      : PhosphorIconsFill.speakerHigh,
+                  ? PhosphorIconsFill.speakerLow
+                  : PhosphorIconsFill.speakerHigh,
               color: theme.onSurfaceMuted,
               size: 20,
             ),
@@ -739,7 +772,7 @@ class _DownloadButton extends ConsumerWidget {
     final theme = AppThemeScope.of(context);
     final downloadedTracks = ref.watch(downloadedTracksProvider);
     final isDownloaded = isTrackOnDevice(track, downloadedTracks);
-    
+
     final activeDownloads = ref.watch(activeDownloadsProvider);
     final progress = activeDownloads[track.id];
     final isDownloading = progress != null;
@@ -775,7 +808,9 @@ class _DownloadButton extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Icon(
-          isDownloaded ? PhosphorIconsFill.cloudCheck : PhosphorIconsRegular.cloudArrowDown,
+          isDownloaded
+              ? PhosphorIconsFill.cloudCheck
+              : PhosphorIconsRegular.cloudArrowDown,
           color: isDownloaded ? theme.accent : theme.onSurfaceMuted,
           size: 24,
         ),
@@ -783,4 +818,3 @@ class _DownloadButton extends ConsumerWidget {
     );
   }
 }
-

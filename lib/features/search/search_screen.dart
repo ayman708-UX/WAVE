@@ -125,9 +125,7 @@ class _Browse extends ConsumerWidget {
       physics: const BouncingScrollPhysics(),
       slivers: <Widget>[
         if (recents.isNotEmpty) ...<Widget>[
-          const SliverToBoxAdapter(
-            child: SectionHeader(title: 'Recent'),
-          ),
+          const SliverToBoxAdapter(child: SectionHeader(title: 'Recent')),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -139,9 +137,8 @@ class _Browse extends ConsumerWidget {
                     RecentSearchChip(
                       label: q,
                       onTap: () => onTapRecent(q),
-                      onRemove: () => ref
-                          .read(recentSearchesProvider.notifier)
-                          .remove(q),
+                      onRemove: () =>
+                          ref.read(recentSearchesProvider.notifier).remove(q),
                     ),
                 ],
               ),
@@ -200,36 +197,33 @@ class _ResultsState extends ConsumerState<_Results> {
             ),
             // Community Playlists section (from Supabase)
             SliverToBoxAdapter(
-              child: _CommunityPlaylistsSearchSection(query: ref.watch(searchQueryProvider)),
+              child: _CommunityPlaylistsSearchSection(
+                query: ref.watch(searchQueryProvider),
+              ),
             ),
             if (r.tracks.isNotEmpty) ...<Widget>[
               const SliverToBoxAdapter(child: SectionHeader(title: 'Tracks')),
               SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final track = r.tracks[i];
-                    return TrackRow(
-                      track: track,
-                      queue: r.tracks,
-                      indexInQueue: i,
-                      onTapOverride: () async => _playSearchTrack(
-                        context,
-                        ref,
-                        track,
-                        r.tracks,
-                        i,
-                        addRelated: true,
-                      ),
-                    );
-                  },
-                  childCount: r.tracks.length > 5 ? 5 : r.tracks.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, i) {
+                  final track = r.tracks[i];
+                  return TrackRow(
+                    track: track,
+                    queue: r.tracks,
+                    indexInQueue: i,
+                    onTapOverride: () async => _playSearchTrack(
+                      context,
+                      ref,
+                      track,
+                      r.tracks,
+                      i,
+                      addRelated: true,
+                    ),
+                  );
+                }, childCount: r.tracks.length > 5 ? 5 : r.tracks.length),
               ),
             ],
             if (r.artists.isNotEmpty) ...<Widget>[
-              const SliverToBoxAdapter(
-                child: SectionHeader(title: 'Artists'),
-              ),
+              const SliverToBoxAdapter(child: SectionHeader(title: 'Artists')),
               SliverToBoxAdapter(
                 child: SnapHorizontalList(
                   itemCount: r.artists.length,
@@ -240,9 +234,7 @@ class _ResultsState extends ConsumerState<_Results> {
               ),
             ],
             if (r.albums.isNotEmpty) ...<Widget>[
-              const SliverToBoxAdapter(
-                child: SectionHeader(title: 'Albums'),
-              ),
+              const SliverToBoxAdapter(child: SectionHeader(title: 'Albums')),
               SliverToBoxAdapter(
                 child: SnapHorizontalList(
                   itemCount: r.albums.length,
@@ -261,8 +253,7 @@ class _ResultsState extends ConsumerState<_Results> {
                   itemCount: r.playlists.length,
                   itemExtent: 150,
                   height: 198,
-                  itemBuilder: (_, i) =>
-                      PlaylistCard(playlist: r.playlists[i]),
+                  itemBuilder: (_, i) => PlaylistCard(playlist: r.playlists[i]),
                 ),
               ),
             ],
@@ -285,7 +276,9 @@ class _ResultsState extends ConsumerState<_Results> {
     await controls.playTracks(queue, startIndex: index);
 
     if (context.mounted) {
-      ref.read(recentlyPlayedProvider.notifier).push(
+      ref
+          .read(recentlyPlayedProvider.notifier)
+          .push(
             RecentEntry(
               kind: 'track',
               id: track.id,
@@ -414,13 +407,19 @@ class _WaveUsersSectionState extends ConsumerState<_WaveUsersSection> {
 
   Future<void> _search() async {
     if (widget.query.trim().isEmpty) {
-      setState(() { _users = []; _searched = false; });
+      setState(() {
+        _users = [];
+        _searched = false;
+      });
       return;
     }
     final svc = ref.read(supabaseProfileProvider);
     final results = await svc.searchUsers(widget.query);
     if (mounted) {
-      setState(() { _users = results; _searched = true; });
+      setState(() {
+        _users = results;
+        _searched = true;
+      });
     }
   }
 
@@ -526,10 +525,7 @@ class _WaveUserCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '@$username',
-                    style: TextStyle(
-                      color: theme.onSurfaceMuted,
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: theme.onSurfaceMuted, fontSize: 11),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -537,11 +533,18 @@ class _WaveUserCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(PhosphorIconsRegular.lock, size: 10, color: theme.onSurfaceMuted),
+                        Icon(
+                          PhosphorIconsRegular.lock,
+                          size: 10,
+                          color: theme.onSurfaceMuted,
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           'Private',
-                          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 10),
+                          style: TextStyle(
+                            color: theme.onSurfaceMuted,
+                            fontSize: 10,
+                          ),
                         ),
                       ],
                     ),
@@ -573,7 +576,7 @@ class _CommunityPlaylistsSearchSection extends ConsumerWidget {
     return asyncPlaylists.when(
       data: (playlists) {
         if (playlists.isEmpty) return const SizedBox.shrink();
-        
+
         return Column(
           children: [
             const SectionHeader(title: 'Community Playlists'),

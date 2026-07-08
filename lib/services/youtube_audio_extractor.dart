@@ -335,10 +335,7 @@ class YoutubeAudioExtractor {
     );
     for (final id in ids.take(_maxVideoCandidates)) {
       try {
-        final res = await getAudioUrl(
-          id,
-          verifyStream: verifyStream,
-        ).timeout(
+        final res = await getAudioUrl(id, verifyStream: verifyStream).timeout(
           _candidateResolveTimeout,
           onTimeout: () {
             _log('candidate $id timed out');

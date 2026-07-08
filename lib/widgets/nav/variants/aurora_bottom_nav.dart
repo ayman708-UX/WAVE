@@ -103,7 +103,10 @@ class _AuroraTabState extends State<_AuroraTab>
         animation: _bounce,
         builder: (context, _) {
           final scale = widget.active
-              ? 1 + 0.18 * Curves.elasticOut.transform(_bounce.value) * (1 - _bounce.value * 0.6)
+              ? 1 +
+                    0.18 *
+                        Curves.elasticOut.transform(_bounce.value) *
+                        (1 - _bounce.value * 0.6)
               : 1.0;
           return Stack(
             alignment: Alignment.center,

@@ -47,7 +47,7 @@ class HiveBoxes {
 
   static Future<void> openAll() async {
     await Hive.initFlutter();
-    
+
     await Future.wait<void>(<Future<void>>[
       Hive.openBox<dynamic>(settings),
       Hive.openBox<dynamic>(likedTracks),

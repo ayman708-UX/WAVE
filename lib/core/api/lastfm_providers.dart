@@ -9,7 +9,9 @@ final lastfmApiClientProvider = Provider<LastfmApiClient>((ref) {
   return LastfmApiClient();
 });
 
-final recommendedTracksProvider = FutureProvider<List<DeezerTrack>>((ref) async {
+final recommendedTracksProvider = FutureProvider<List<DeezerTrack>>((
+  ref,
+) async {
   final recentlyPlayed = ref.watch(recentlyPlayedProvider);
   final lastfmApi = ref.watch(lastfmApiClientProvider);
   final deezerApi = ref.watch(deezerApiClientProvider);
@@ -50,7 +52,9 @@ final recommendedTracksProvider = FutureProvider<List<DeezerTrack>>((ref) async 
     if (tName.isEmpty || tArtist.isEmpty) continue;
 
     try {
-      final searchRes = await deezerApi.searchTracks('artist:"$tArtist" track:"$tName"');
+      final searchRes = await deezerApi.searchTracks(
+        'artist:"$tArtist" track:"$tName"',
+      );
       if (searchRes.isNotEmpty) {
         // Take the first matching track
         deezerTracks.add(searchRes.first);

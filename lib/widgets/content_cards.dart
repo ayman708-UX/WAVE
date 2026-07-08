@@ -135,7 +135,9 @@ class AlbumCard extends ConsumerWidget {
       subtitle: subtitleOverride ?? (album.artist?.name ?? 'Album'),
       size: size,
       onTap: () {
-        ref.read(recentlyPlayedProvider.notifier).push(
+        ref
+            .read(recentlyPlayedProvider.notifier)
+            .push(
               RecentEntry(
                 kind: 'album',
                 id: album.id,
@@ -167,7 +169,9 @@ class PlaylistCard extends ConsumerWidget {
       subtitle: playlist.creator?.name ?? 'Playlist',
       size: size,
       onTap: () {
-        ref.read(recentlyPlayedProvider.notifier).push(
+        ref
+            .read(recentlyPlayedProvider.notifier)
+            .push(
               RecentEntry(
                 kind: 'playlist',
                 id: playlist.id,
@@ -199,7 +203,9 @@ class ArtistCircle extends ConsumerWidget {
       size: size,
       shape: BoxShape.circle,
       onTap: () {
-        ref.read(recentlyPlayedProvider.notifier).push(
+        ref
+            .read(recentlyPlayedProvider.notifier)
+            .push(
               RecentEntry(
                 kind: 'artist',
                 id: artist.id,
@@ -235,7 +241,8 @@ class TrackRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    final cover = track.album?.coverMedium ??
+    final cover =
+        track.album?.coverMedium ??
         track.album?.cover ??
         track.album?.coverSmall;
     final onDevice = isTrackOnDevice(
@@ -254,12 +261,15 @@ class TrackRow extends ConsumerWidget {
     );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTapOverride ??
+      onTap:
+          onTapOverride ??
           () async {
             final controls = ref.read(playerControlsProvider);
             await controls.playTracks(queue, startIndex: indexInQueue);
             if (context.mounted) {
-              await ref.read(recentlyPlayedProvider.notifier).push(
+              await ref
+                  .read(recentlyPlayedProvider.notifier)
+                  .push(
                     RecentEntry(
                       kind: 'track',
                       id: track.id,
@@ -288,7 +298,9 @@ class TrackRow extends ConsumerWidget {
                 ),
               ),
             ClipRRect(
-              borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 6),
+              borderRadius: BorderRadius.circular(
+                theme.cardRadius == 0 ? 0 : 6,
+              ),
               child: cover != null
                   ? CachedNetworkImage(
                       imageUrl: cover,
@@ -320,10 +332,7 @@ class TrackRow extends ConsumerWidget {
                     track.artist?.name ?? 'Unknown artist',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: theme.onSurfaceMuted,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
                   ),
                   if (onDevice)
                     Padding(
@@ -349,7 +358,6 @@ class TrackRow extends ConsumerWidget {
   }
 }
 
-
 String _fmtDuration(int? secs) {
   if (secs == null || secs <= 0) return '--:--';
   final m = secs ~/ 60;
@@ -373,7 +381,8 @@ class TrackCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    final cover = track.album?.coverBig ?? track.album?.coverMedium ?? track.album?.cover;
+    final cover =
+        track.album?.coverBig ?? track.album?.coverMedium ?? track.album?.cover;
     final onDevice = isTrackOnDevice(
       track,
       ref.watch(downloadedTracksProvider),
@@ -397,9 +406,14 @@ class TrackCard extends ConsumerWidget {
       onTap: () async {
         final controls = ref.read(playerControlsProvider);
         final indexInQueue = queue.indexOf(track);
-        await controls.playTracks(queue, startIndex: indexInQueue >= 0 ? indexInQueue : 0);
+        await controls.playTracks(
+          queue,
+          startIndex: indexInQueue >= 0 ? indexInQueue : 0,
+        );
         if (context.mounted) {
-          await ref.read(recentlyPlayedProvider.notifier).push(
+          await ref
+              .read(recentlyPlayedProvider.notifier)
+              .push(
                 RecentEntry(
                   kind: 'track',
                   id: track.id,

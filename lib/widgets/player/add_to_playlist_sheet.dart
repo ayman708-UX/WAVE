@@ -32,7 +32,8 @@ class _AddToPlaylistSheet extends ConsumerStatefulWidget {
   final List<DeezerTrack> tracks;
 
   @override
-  ConsumerState<_AddToPlaylistSheet> createState() => _AddToPlaylistSheetState();
+  ConsumerState<_AddToPlaylistSheet> createState() =>
+      _AddToPlaylistSheetState();
 }
 
 class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
@@ -52,7 +53,9 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
     final title = _controller.text.trim();
     if (title.isEmpty) return;
 
-    final playlist = await ref.read(userPlaylistsProvider.notifier).create(
+    final playlist = await ref
+        .read(userPlaylistsProvider.notifier)
+        .create(
           title: title,
           coverUrl: _firstTrack.album?.coverBig ?? _firstTrack.album?.cover,
         );
@@ -68,7 +71,9 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_addedMessage(playlist.title, widget.tracks.length))),
+      SnackBar(
+        content: Text(_addedMessage(playlist.title, widget.tracks.length)),
+      ),
     );
   }
 
@@ -94,7 +99,10 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
         content: Text(
           allInPlaylist
               ? _removedMessage(playlist.title, widget.tracks.length)
-              : _addedMessage(playlist.title, widget.tracks.length - alreadyCount),
+              : _addedMessage(
+                  playlist.title,
+                  widget.tracks.length - alreadyCount,
+                ),
         ),
       ),
     );
@@ -109,11 +117,13 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
 
     final alreadyIn = _single
         ? ref.watch(playlistsForTrackProvider(_firstTrack.id))
-        : playlists.where((playlist) {
-            final tracks =
-                tracksByPlaylist[playlist.id] ?? const <DeezerTrack>[];
-            return tracks.any((track) => selectedIds.contains(track.id));
-          }).toList(growable: false);
+        : playlists
+              .where((playlist) {
+                final tracks =
+                    tracksByPlaylist[playlist.id] ?? const <DeezerTrack>[];
+                return tracks.any((track) => selectedIds.contains(track.id));
+              })
+              .toList(growable: false);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.68,
@@ -206,10 +216,7 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                         theme.cardRadius == 0 ? 0 : 10,
                       ),
                     ),
-                    child: Icon(
-                      PhosphorIconsRegular.plus,
-                      color: theme.accent,
-                    ),
+                    child: Icon(PhosphorIconsRegular.plus, color: theme.accent),
                   ),
                   title: Text(
                     'Create new playlist',
@@ -222,10 +229,7 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                     _single
                         ? 'Creates it and adds this song'
                         : 'Creates it and adds ${widget.tracks.length} selected songs',
-                    style: TextStyle(
-                      color: theme.onSurfaceMuted,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
                   ),
                   onTap: () => setState(() => _creating = true),
                 ),
@@ -246,14 +250,16 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                         itemCount: playlists.length,
                         itemBuilder: (ctx, i) {
                           final playlist = playlists[i];
-                          final tracks = tracksByPlaylist[playlist.id] ??
+                          final tracks =
+                              tracksByPlaylist[playlist.id] ??
                               const <DeezerTrack>[];
                           final alreadyCount = tracks
                               .where((track) => selectedIds.contains(track.id))
                               .length;
                           final allInPlaylist =
                               alreadyCount == widget.tracks.length;
-                          final cover = playlist.pictureBig ??
+                          final cover =
+                              playlist.pictureBig ??
                               playlist.pictureMedium ??
                               playlist.picture;
 
@@ -307,7 +313,9 @@ class _AddToPlaylistSheetState extends ConsumerState<_AddToPlaylistSheet> {
                               icon: allInPlaylist
                                   ? PhosphorIconsRegular.minusCircle
                                   : PhosphorIconsRegular.plusCircle,
-                              accent: allInPlaylist ? theme.error : theme.accent,
+                              accent: allInPlaylist
+                                  ? theme.error
+                                  : theme.accent,
                             ),
                             onTap: () => _togglePlaylist(
                               playlist,

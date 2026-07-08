@@ -27,7 +27,8 @@ class _HorizontalScrollArrowsState extends State<HorizontalScrollArrows> {
   @override
   void initState() {
     super.initState();
-    _isDesktop = kIsWeb ||
+    _isDesktop =
+        kIsWeb ||
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux;
@@ -56,7 +57,7 @@ class _HorizontalScrollArrowsState extends State<HorizontalScrollArrows> {
 
   void _updateScrollButtons() {
     if (!widget.controller.hasClients) return;
-    
+
     final position = widget.controller.position;
     final canScrollLeft = position.pixels > position.minScrollExtent;
     final canScrollRight = position.pixels < position.maxScrollExtent;
@@ -72,7 +73,10 @@ class _HorizontalScrollArrowsState extends State<HorizontalScrollArrows> {
   void _scrollLeft() {
     if (!widget.controller.hasClients) return;
     final position = widget.controller.position;
-    final target = (position.pixels - 300).clamp(position.minScrollExtent, position.maxScrollExtent);
+    final target = (position.pixels - 300).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
     widget.controller.animateTo(
       target,
       duration: const Duration(milliseconds: 300),
@@ -83,7 +87,10 @@ class _HorizontalScrollArrowsState extends State<HorizontalScrollArrows> {
   void _scrollRight() {
     if (!widget.controller.hasClients) return;
     final position = widget.controller.position;
-    final target = (position.pixels + 300).clamp(position.minScrollExtent, position.maxScrollExtent);
+    final target = (position.pixels + 300).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
     widget.controller.animateTo(
       target,
       duration: const Duration(milliseconds: 300),
@@ -166,10 +173,7 @@ class _ArrowButton extends StatelessWidget {
         icon: Icon(icon),
         onPressed: onPressed,
         iconSize: size * 0.6,
-        constraints: BoxConstraints(
-          minWidth: size,
-          minHeight: size,
-        ),
+        constraints: BoxConstraints(minWidth: size, minHeight: size),
         splashRadius: size * 0.6,
         padding: EdgeInsets.zero,
       ),

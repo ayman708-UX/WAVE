@@ -20,8 +20,7 @@ void main() {
     });
 
     test('fromJson tolerates missing optional fields', () {
-      final a =
-          DeezerArtist.fromJson(<String, dynamic>{'id': 1, 'name': 'X'});
+      final a = DeezerArtist.fromJson(<String, dynamic>{'id': 1, 'name': 'X'});
       expect(a.pictureBig, isNull);
       expect(a.nbAlbum, isNull);
     });

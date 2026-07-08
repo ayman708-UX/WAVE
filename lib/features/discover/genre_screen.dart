@@ -104,7 +104,10 @@ class _SliverHeader extends StatelessWidget {
             color: Colors.black.withValues(alpha: 0.3),
             shape: BoxShape.circle,
           ),
-          child: const Icon(PhosphorIconsRegular.caretLeft, color: Colors.white),
+          child: const Icon(
+            PhosphorIconsRegular.caretLeft,
+            color: Colors.white,
+          ),
         ),
       ),
       flexibleSpace: FlexibleSpaceBar(

@@ -22,11 +22,11 @@ class SearchResults {
   });
 
   const SearchResults.empty()
-      : youtubeTracks = const <DeezerTrack>[],
-        tracks = const <DeezerTrack>[],
-        artists = const <DeezerArtist>[],
-        albums = const <DeezerAlbum>[],
-        playlists = const <DeezerPlaylist>[];
+    : youtubeTracks = const <DeezerTrack>[],
+      tracks = const <DeezerTrack>[],
+      artists = const <DeezerArtist>[],
+      albums = const <DeezerAlbum>[],
+      playlists = const <DeezerPlaylist>[];
 
   /// Playable YouTube results shown under the "YouTube - listing" section.
   final List<DeezerTrack> youtubeTracks;
@@ -74,8 +74,9 @@ class SearchQueryNotifier extends Notifier<String> {
   }
 }
 
-final searchQueryProvider =
-    NotifierProvider<SearchQueryNotifier, String>(SearchQueryNotifier.new);
+final searchQueryProvider = NotifierProvider<SearchQueryNotifier, String>(
+  SearchQueryNotifier.new,
+);
 
 /// Issues Deezer search calls only.
 ///
@@ -153,5 +154,5 @@ class RecentSearchesNotifier extends Notifier<List<String>> {
 
 final recentSearchesProvider =
     NotifierProvider<RecentSearchesNotifier, List<String>>(
-  RecentSearchesNotifier.new,
-);
+      RecentSearchesNotifier.new,
+    );

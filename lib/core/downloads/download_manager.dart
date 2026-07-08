@@ -23,13 +23,13 @@ final downloadManagerProvider = Provider<DownloadManager>((ref) {
 
 final activeDownloadsProvider =
     NotifierProvider<ActiveDownloadsNotifier, Map<int, double>>(
-  ActiveDownloadsNotifier.new,
-);
+      ActiveDownloadsNotifier.new,
+    );
 
 final downloadQueueProvider =
     NotifierProvider<DownloadQueueNotifier, DownloadQueueState>(
-  DownloadQueueNotifier.new,
-);
+      DownloadQueueNotifier.new,
+    );
 
 final downloadLocationProvider = FutureProvider<String>((ref) async {
   return ref.read(downloadManagerProvider).downloadsDirectory();
@@ -265,10 +265,7 @@ class _DownloadCancelledException implements Exception {
 }
 
 class _DownloadHead {
-  const _DownloadHead({
-    this.contentType,
-    this.contentLength = 0,
-  });
+  const _DownloadHead({this.contentType, this.contentLength = 0});
 
   final String? contentType;
   final int contentLength;
@@ -353,7 +350,9 @@ class DownloadManager {
     String? parentDirectory,
   }) async {
     final privatePath = await _getAppDir();
-    final exportPath = await _defaultExportDir(parentDirectory: parentDirectory);
+    final exportPath = await _defaultExportDir(
+      parentDirectory: parentDirectory,
+    );
 
     final sourceDir = Directory(privatePath);
     if (!await sourceDir.exists()) {
@@ -485,7 +484,10 @@ class DownloadManager {
     );
   }
 
-  Future<void> downloadAlbum(String albumTitle, List<DeezerTrack> tracks) async {
+  Future<void> downloadAlbum(
+    String albumTitle,
+    List<DeezerTrack> tracks,
+  ) async {
     await queueTracks(
       tracks,
       title: 'Album: $albumTitle',
@@ -585,16 +587,18 @@ class DownloadManager {
       if (item.status == DownloadItemStatus.failed ||
           item.status == DownloadItemStatus.cancelled) {
         _queue[i] = item.copyWith(
-          status: _isDownloadedForQueue(
-            item.track,
-            allowFuzzy: item.allowFuzzyDownloadedSkip,
-          )
+          status:
+              _isDownloadedForQueue(
+                item.track,
+                allowFuzzy: item.allowFuzzyDownloadedSkip,
+              )
               ? DownloadItemStatus.skipped
               : DownloadItemStatus.waiting,
-          progress: _isDownloadedForQueue(
-            item.track,
-            allowFuzzy: item.allowFuzzyDownloadedSkip,
-          )
+          progress:
+              _isDownloadedForQueue(
+                item.track,
+                allowFuzzy: item.allowFuzzyDownloadedSkip,
+              )
               ? 1.0
               : 0.0,
           attempt: 0,
@@ -644,7 +648,6 @@ class DownloadManager {
         if (item.status != DownloadItemStatus.waiting) {
           continue;
         }
-
 
         if (_isDownloadedForQueue(
           item.track,
@@ -715,7 +718,7 @@ class DownloadManager {
           );
         }
 
-          _removeActiveDownload(item.trackId);
+        _removeActiveDownload(item.trackId);
         _emitQueue();
       }
     } finally {
@@ -730,10 +733,9 @@ class DownloadManager {
   Future<AudioOnlyStreamInfo?> _streamInfoForDownload(DeezerTrack track) {
     YoutubeRateLimitGuard.throwIfLimited();
     return _cancelable(
-      _resolver.resolveStreamInfo(track).timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => null,
-      ),
+      _resolver
+          .resolveStreamInfo(track)
+          .timeout(const Duration(seconds: 8), onTimeout: () => null),
     );
   }
 
@@ -754,10 +756,9 @@ class DownloadManager {
     // first, then use the slower streamInfo manifest fallback only if the fast
     // path fails. Do not sit through two long attempts per song.
     final res = await _cancelable(
-      _resolver.resolveUrl(track).timeout(
-        const Duration(seconds: 16),
-        onTimeout: () => null,
-      ),
+      _resolver
+          .resolveUrl(track)
+          .timeout(const Duration(seconds: 16), onTimeout: () => null),
     );
 
     if (res != null) {
@@ -806,7 +807,9 @@ class DownloadManager {
       }
     }
 
-    throw Exception('Could not find a playable YouTube audio source quickly. Use Retry failed later.');
+    throw Exception(
+      'Could not find a playable YouTube audio source quickly. Use Retry failed later.',
+    );
   }
 
   Future<void> _downloadFromStreamInfo({
@@ -1013,14 +1016,18 @@ class DownloadManager {
             ),
             onReceiveProgress: (received, total) {
               receivedByPart[i] = received;
-              final receivedTotal =
-                  receivedByPart.fold<int>(0, (sum, value) => sum + value);
+              final receivedTotal = receivedByPart.fold<int>(
+                0,
+                (sum, value) => sum + value,
+              );
               final elapsedMs = stopwatch.elapsedMilliseconds;
               final bytesPerSecond = elapsedMs <= 0
                   ? 0
                   : ((receivedTotal * 1000) / elapsedMs).round();
-              final progress =
-                  _downloadProgressFromBytes(receivedTotal, totalBytes);
+              final progress = _downloadProgressFromBytes(
+                receivedTotal,
+                totalBytes,
+              );
 
               _setDownloadProgress(trackId, progress);
               _updateQueueItem(
@@ -1056,7 +1063,9 @@ class DownloadManager {
       try {
         for (final segment in segmentFiles) {
           if (!await segment.exists()) {
-            throw Exception('Missing downloaded segment ${p.basename(segment.path)}');
+            throw Exception(
+              'Missing downloaded segment ${p.basename(segment.path)}',
+            );
           }
           final bytes = await segment.readAsBytes();
           sink.add(bytes);
@@ -1137,8 +1146,7 @@ class DownloadManager {
           followRedirects: true,
           receiveTimeout: const Duration(seconds: 45),
           sendTimeout: const Duration(seconds: 20),
-          validateStatus: (code) =>
-              code != null && code >= 200 && code < 400,
+          validateStatus: (code) => code != null && code >= 200 && code < 400,
         ),
         onReceiveProgress: (received, total) {
           final elapsedMs = stopwatch.elapsedMilliseconds;
@@ -1148,8 +1156,8 @@ class DownloadManager {
           final effectiveTotal = total > 0
               ? total
               : (expectedTotalBytes != null && expectedTotalBytes > 0
-                  ? expectedTotalBytes
-                  : 0);
+                    ? expectedTotalBytes
+                    : 0);
           final progress = _downloadProgressFromBytes(received, effectiveTotal);
           _setDownloadProgress(trackId, progress);
           _updateQueueItem(
@@ -1185,7 +1193,6 @@ class DownloadManager {
       stopwatch.stop();
     }
   }
-
 
   void _throwIfCancelled() {
     if (_cancelRequested) {
@@ -1234,8 +1241,10 @@ class DownloadManager {
           .timeout(const Duration(seconds: 10));
 
       final contentLength =
-          int.tryParse(response.headers.value(Headers.contentLengthHeader) ?? '') ??
-              0;
+          int.tryParse(
+            response.headers.value(Headers.contentLengthHeader) ?? '',
+          ) ??
+          0;
 
       return _DownloadHead(
         contentType: response.headers.value(Headers.contentTypeHeader),
@@ -1353,7 +1362,9 @@ class DownloadManager {
     if (coverUrl != null && coverUrl.isNotEmpty) {
       final coverExt = p.extension(Uri.parse(coverUrl).path);
       final coverExtString = coverExt.isEmpty ? '.jpg' : coverExt;
-      final coverFile = File(p.join(baseDir, '${track.id}_cover$coverExtString'));
+      final coverFile = File(
+        p.join(baseDir, '${track.id}_cover$coverExtString'),
+      );
 
       try {
         await _dio.download(coverUrl, coverFile.path);
@@ -1365,7 +1376,8 @@ class DownloadManager {
       }
     }
 
-    final metadata = jsonDecode(jsonEncode(track.toJson())) as Map<String, dynamic>;
+    final metadata =
+        jsonDecode(jsonEncode(track.toJson())) as Map<String, dynamic>;
     metadata['localAudioPath'] = audioFile.path;
     metadata['localAudioExt'] = ext;
     metadata['localAudioBytes'] = await audioFile.length();
@@ -1377,7 +1389,9 @@ class DownloadManager {
 
     await _box.put(track.id, metadata);
     _setDownloadProgress(track.id, 1.0);
-    appLogger.i('Successfully downloaded track ${track.id} to ${audioFile.path}');
+    appLogger.i(
+      'Successfully downloaded track ${track.id} to ${audioFile.path}',
+    );
   }
 
   Future<void> deleteDownload(int trackId) async {
@@ -1405,10 +1419,7 @@ class DownloadManager {
     return LocalDownloadMatcher.localAudioPathForTrack(track) != null;
   }
 
-  bool _isDownloadedForQueue(
-    DeezerTrack track, {
-    required bool allowFuzzy,
-  }) {
+  bool _isDownloadedForQueue(DeezerTrack track, {required bool allowFuzzy}) {
     if (allowFuzzy) {
       return _isDownloadedTrack(track);
     }
@@ -1476,11 +1487,10 @@ class DownloadManager {
     _emitQueue();
   }
 
-  void _emitQueue({
-    bool? running,
-    bool? cancelling,
-  }) {
-    _ref.read(downloadQueueProvider.notifier).replace(
+  void _emitQueue({bool? running, bool? cancelling}) {
+    _ref
+        .read(downloadQueueProvider.notifier)
+        .replace(
           DownloadQueueState(
             running: running ?? _processing,
             cancelling: cancelling ?? _cancelRequested,

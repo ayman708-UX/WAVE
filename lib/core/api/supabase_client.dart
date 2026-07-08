@@ -30,7 +30,7 @@ class SupabaseApiClient {
         url: supabaseUrl!,
         publishableKey: supabaseAnonKey!,
       );
-      
+
       appLogger.i('Supabase initialized successfully');
     } catch (e) {
       appLogger.e('Could not initialize Supabase: $e');

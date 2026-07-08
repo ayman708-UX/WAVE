@@ -128,7 +128,8 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     bool retryCurrentTrack = false,
   }) async {
     final retryTrack = track ?? _queue.current;
-    final canRetry = retryCurrentTrack &&
+    final canRetry =
+        retryCurrentTrack &&
         retryTrack != null &&
         _queue.current?.id == retryTrack.id &&
         _lastAutoRecoveryTrackId != retryTrack.id;
@@ -521,14 +522,18 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
       if (localPath == null) {
         await LocalProxy.ensureRunning();
-        appLogger.i('Resolving playback stream for ${track.artist?.name ?? ''} - ${track.title}');
-        final res = await _resolver.resolveUrl(track).timeout(
-          const Duration(seconds: 22),
-          onTimeout: () {
-            appLogger.w('Stream resolution timed out for ${track.title}');
-            return null;
-          },
+        appLogger.i(
+          'Resolving playback stream for ${track.artist?.name ?? ''} - ${track.title}',
         );
+        final res = await _resolver
+            .resolveUrl(track)
+            .timeout(
+              const Duration(seconds: 22),
+              onTimeout: () {
+                appLogger.w('Stream resolution timed out for ${track.title}');
+                return null;
+              },
+            );
         url = res?.url;
         userAgent = res?.userAgent;
       } else {
@@ -545,14 +550,16 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
-      await fadingInPlayer.open(mk.Media(url), play: true).timeout(
+      await fadingInPlayer
+          .open(mk.Media(url), play: true)
+          .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
           );
       await fadingInPlayer.play().timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {},
-          );
+        const Duration(seconds: 5),
+        onTimeout: () {},
+      );
       if (_isStalePlaybackOp(op)) {
         await fadingInPlayer.stop();
         return;
@@ -570,10 +577,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       appLogger.e('YouTube rate limit blocked playback: $e');
       await _resetAudioPipeline(reason: 'YouTube rate limit');
       _emitPlayer(
-        _state.copyWith(
-          status: PlaybackStatus.error,
-          errorMessage: e.message,
-        ),
+        _state.copyWith(status: PlaybackStatus.error, errorMessage: e.message),
       );
       return;
     } catch (e, st) {
@@ -658,13 +662,15 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
       if (localPath == null) {
         await LocalProxy.ensureRunning();
-        final res = await _resolver.resolveUrl(track).timeout(
-          const Duration(seconds: 22),
-          onTimeout: () {
-            appLogger.w('Stream resolution timed out for ${track.title}');
-            return null;
-          },
-        );
+        final res = await _resolver
+            .resolveUrl(track)
+            .timeout(
+              const Duration(seconds: 22),
+              onTimeout: () {
+                appLogger.w('Stream resolution timed out for ${track.title}');
+                return null;
+              },
+            );
         url = res?.url;
         userAgent = res?.userAgent;
       } else {
@@ -696,14 +702,13 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
-      await player.open(mk.Media(url), play: true).timeout(
+      await player
+          .open(mk.Media(url), play: true)
+          .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
           );
-      await player.play().timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {},
-          );
+      await player.play().timeout(const Duration(seconds: 5), onTimeout: () {});
       if (_isStalePlaybackOp(op)) {
         await player.stop();
         return;
@@ -719,10 +724,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       appLogger.e('YouTube rate limit blocked playback: $e');
       await _resetAudioPipeline(reason: 'YouTube rate limit');
       _emitPlayer(
-        _state.copyWith(
-          status: PlaybackStatus.error,
-          errorMessage: e.message,
-        ),
+        _state.copyWith(status: PlaybackStatus.error, errorMessage: e.message),
       );
       return;
     } catch (e, st) {
@@ -775,9 +777,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       appLogger.w('LocalProxy ensureRunning failed before resume: $e');
     }
     await _activePlayer.play().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {},
-        );
+      const Duration(seconds: 5),
+      onTimeout: () {},
+    );
   }
 
   @override
@@ -826,7 +828,8 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       );
       return;
     }
-    if (_activePlayer.state.playing || _state.status == PlaybackStatus.playing) {
+    if (_activePlayer.state.playing ||
+        _state.status == PlaybackStatus.playing) {
       await pause();
       return;
     }
@@ -1115,7 +1118,6 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   bool isDownloaded(int trackId) {
     return LocalDownloadMatcher.isDownloadedById(trackId);
   }
-
 
   @override
   Future<void> setEqualizer(List<double> bandsDb) async {

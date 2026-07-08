@@ -75,7 +75,8 @@ class _HeartLikeButtonState extends State<HeartLikeButton>
               ),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                transitionBuilder: (c, a) =>
+                    ScaleTransition(scale: a, child: c),
                 child: Icon(
                   widget.liked
                       ? PhosphorIconsFill.heart
@@ -124,14 +125,20 @@ class _HeartParticlesPainter extends CustomPainter {
     final y = c.dy - r;
     path.moveTo(x + w / 2, y + h * 0.85);
     path.cubicTo(
-      x - w * 0.1, y + h * 0.55,
-      x + w * 0.05, y + h * 0.05,
-      x + w / 2, y + h * 0.3,
+      x - w * 0.1,
+      y + h * 0.55,
+      x + w * 0.05,
+      y + h * 0.05,
+      x + w / 2,
+      y + h * 0.3,
     );
     path.cubicTo(
-      x + w * 0.95, y + h * 0.05,
-      x + w * 1.1, y + h * 0.55,
-      x + w / 2, y + h * 0.85,
+      x + w * 0.95,
+      y + h * 0.05,
+      x + w * 1.1,
+      y + h * 0.55,
+      x + w / 2,
+      y + h * 0.85,
     );
     canvas.drawPath(path, p);
   }

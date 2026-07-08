@@ -29,11 +29,8 @@ class WaveSearchBar extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: theme.surface,
-          borderRadius:
-              BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
-          border: Border.all(
-            color: theme.onSurface.withValues(alpha: 0.08),
-          ),
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
+          border: Border.all(color: theme.onSurface.withValues(alpha: 0.08)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         height: 48,
@@ -81,19 +78,19 @@ class WaveSearchBar extends StatelessWidget {
                     controller.clear();
                     onChanged('');
                   },
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Icon(
-                    PhosphorIconsRegular.x,
-                    color: theme.onSurfaceMuted,
-                    size: 18,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(
+                      PhosphorIconsRegular.x,
+                      color: theme.onSurfaceMuted,
+                      size: 18,
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -123,9 +120,7 @@ class RecentSearchChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.surface,
           borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
-          border: Border.all(
-            color: theme.onSurface.withValues(alpha: 0.1),
-          ),
+          border: Border.all(color: theme.onSurface.withValues(alpha: 0.1)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

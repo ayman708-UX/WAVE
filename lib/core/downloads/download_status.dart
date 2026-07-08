@@ -19,10 +19,7 @@ class DownloadCoverage {
   bool get partiallyOnDevice => hasTracks && onDevice > 0 && missing > 0;
 }
 
-bool isTrackOnDevice(
-  DeezerTrack track,
-  List<DeezerTrack> downloadedTracks,
-) {
+bool isTrackOnDevice(DeezerTrack track, List<DeezerTrack> downloadedTracks) {
   return LocalDownloadMatcher.findDownloadedMatchInList(
         track,
         downloadedTracks,

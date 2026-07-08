@@ -34,7 +34,8 @@ class SupabasePlaylistSync {
     final lookupTitle = oldTitle ?? playlist.title;
 
     // Wait if this playlist is currently syncing
-    while (_syncingPlaylists.contains(lookupTitle) || _syncingPlaylists.contains(playlist.title)) {
+    while (_syncingPlaylists.contains(lookupTitle) ||
+        _syncingPlaylists.contains(playlist.title)) {
       await Future.delayed(const Duration(milliseconds: 100));
     }
     _syncingPlaylists.add(lookupTitle);
@@ -53,28 +54,37 @@ class SupabasePlaylistSync {
           .eq('user_id', _userId!)
           .eq('name', lookupTitle)
           .limit(1);
-          
-      final existing = existingResponse.isNotEmpty ? existingResponse.first : null;
+
+      final existing = existingResponse.isNotEmpty
+          ? existingResponse.first
+          : null;
 
       if (existing != null) {
         // Update existing
-        await _client.from('playlists').update({
-          'name': playlist.title,
-          'description': playlist.description,
-          'is_public': isPublic,
-          'songs': songsJson,
-        }).eq('id', existing['id']);
+        await _client
+            .from('playlists')
+            .update({
+              'name': playlist.title,
+              'description': playlist.description,
+              'is_public': isPublic,
+              'songs': songsJson,
+            })
+            .eq('id', existing['id']);
         appLogger.i('Playlist synced (updated): ${playlist.title}');
         return existing['id'] as String;
       } else {
         // Insert new
-        final result = await _client.from('playlists').insert({
-          'user_id': _userId,
-          'name': playlist.title,
-          'description': playlist.description,
-          'is_public': isPublic,
-          'songs': songsJson,
-        }).select('id').single();
+        final result = await _client
+            .from('playlists')
+            .insert({
+              'user_id': _userId,
+              'name': playlist.title,
+              'description': playlist.description,
+              'is_public': isPublic,
+              'songs': songsJson,
+            })
+            .select('id')
+            .single();
         appLogger.i('Playlist synced (created): ${playlist.title}');
         return result['id'] as String;
       }
@@ -107,31 +117,29 @@ class SupabasePlaylistSync {
     required Map<int, List<DeezerTrack>> trackMap,
   }) async {
     if (!_isSignedIn || playlists.isEmpty) return;
-    
+
     try {
       // 1. Fetch existing playlists in Supabase to avoid duplicates
       final existingResponse = await _client
           .from('playlists')
           .select('name')
           .eq('user_id', _userId!);
-      
-      final existingNames = existingResponse.map((row) => row['name'].toString()).toSet();
-      
+
+      final existingNames = existingResponse
+          .map((row) => row['name'].toString())
+          .toSet();
+
       // 2. Filter local playlists that don't exist remotely
-      final playlistsToInsert = playlists.where((pl) => !existingNames.contains(pl.title)).toList();
-      
+      final playlistsToInsert = playlists
+          .where((pl) => !existingNames.contains(pl.title))
+          .toList();
+
       if (playlistsToInsert.isEmpty) return;
 
       // 3. Prepare rows for bulk insert
       final rows = playlistsToInsert.map((pl) {
         final tracks = trackMap[pl.id] ?? [];
-        final songsJson = tracks.map((t) => {
-          'id': t.id,
-          'title': t.title,
-          'artist': t.artist?.name ?? 'Unknown',
-          'cover_url': t.album?.coverMedium ?? t.album?.cover ?? '',
-          'duration': t.duration,
-        }).toList();
+        final songsJson = tracks.map((t) => t.toJson()).toList();
 
         return {
           'user_id': _userId,
@@ -152,7 +160,8 @@ class SupabasePlaylistSync {
 
   /// Download all user playlists from Supabase to restore local library.
   Future<void> downloadPlaylists({
-    required Function(DeezerPlaylist playlist, List<DeezerTrack> tracks) onPlaylistFound,
+    required Function(DeezerPlaylist playlist, List<DeezerTrack> tracks)
+    onPlaylistFound,
   }) async {
     if (!_isSignedIn) return;
 
@@ -172,11 +181,13 @@ class SupabasePlaylistSync {
         if (songs.isNotEmpty) {
           final firstSong = songs.first as Map<String, dynamic>;
           final album = firstSong['album'] as Map<String, dynamic>?;
-          pictureUrl = album?['cover_medium']?.toString() ?? album?['cover']?.toString();
+          pictureUrl =
+              album?['cover_medium']?.toString() ?? album?['cover']?.toString();
         }
 
         final playlist = DeezerPlaylist(
-          id: -(row['id'].hashCode.abs()), // Generate a guaranteed negative unique local ID based on Supabase row ID
+          id: -(row['id'].hashCode
+              .abs()), // Generate a guaranteed negative unique local ID based on Supabase row ID
           title: name,
           description: description,
           public: isPublic,

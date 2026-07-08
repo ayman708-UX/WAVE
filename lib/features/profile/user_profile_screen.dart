@@ -27,7 +27,11 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
   late final TabController _tabController;
   Map<String, dynamic>? _profile;
   List<Map<String, dynamic>> _playlists = [];
-  Map<String, List<Map<String, dynamic>>> _library = {'tracks': [], 'albums': [], 'artists': []};
+  Map<String, List<Map<String, dynamic>>> _library = {
+    'tracks': [],
+    'albums': [],
+    'artists': [],
+  };
   bool _loading = true;
 
   @override
@@ -80,25 +84,19 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
     return Scaffold(
       backgroundColor: theme.background,
       body: _loading
-          ? Center(
-              child: CircularProgressIndicator(color: theme.accent),
-            )
+          ? Center(child: CircularProgressIndicator(color: theme.accent))
           : _profile == null
-              ? _buildNotFound(theme)
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    await _loadProfile();
-                  },
-                  color: theme.accent,
-                  backgroundColor: theme.surface,
-                  child: CustomScrollView(
-                    slivers: [
-                      SliverFillRemaining(
-                        child: _buildProfile(theme),
-                      ),
-                    ],
-                  ),
-                ),
+          ? _buildNotFound(theme)
+          : RefreshIndicator(
+              onRefresh: () async {
+                await _loadProfile();
+              },
+              color: theme.accent,
+              backgroundColor: theme.surface,
+              child: CustomScrollView(
+                slivers: [SliverFillRemaining(child: _buildProfile(theme))],
+              ),
+            ),
     );
   }
 
@@ -186,10 +184,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
         const SizedBox(height: 4),
         Text(
           '@$username',
-          style: TextStyle(
-            color: theme.onSurfaceMuted,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 14),
         ),
         const SizedBox(height: 6),
 
@@ -206,106 +201,108 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isPublic ? PhosphorIconsRegular.globe : PhosphorIconsRegular.lock,
+                isPublic
+                    ? PhosphorIconsRegular.globe
+                    : PhosphorIconsRegular.lock,
                 size: 13,
                 color: isPublic ? theme.accent : theme.onSurfaceMuted,
               ),
               const SizedBox(width: 4),
-                Text(
-                  isPublic ? 'Public' : 'Private',
-                  style: TextStyle(
-                    color: isPublic ? theme.accent : theme.onSurfaceMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+              Text(
+                isPublic ? 'Public' : 'Private',
+                style: TextStyle(
+                  color: isPublic ? theme.accent : theme.onSurfaceMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // If private, show private message
+        if (!isPublic)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    PhosphorIconsRegular.lockKey,
+                    size: 48,
+                    color: theme.onSurfaceMuted.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'This account is private',
+                    style: TextStyle(
+                      color: theme.onSurfaceMuted,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Their playlists and library aren't visible",
+                    style: TextStyle(
+                      color: theme.onSurfaceMuted.withValues(alpha: 0.6),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          const SizedBox(height: 20),
-
-          // If private, show private message
-          if (!isPublic)
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      PhosphorIconsRegular.lockKey,
-                      size: 48,
-                      color: theme.onSurfaceMuted.withValues(alpha: 0.4),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'This account is private',
-                      style: TextStyle(
-                        color: theme.onSurfaceMuted,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Their playlists and library aren't visible",
-                      style: TextStyle(
-                        color: theme.onSurfaceMuted.withValues(alpha: 0.6),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        // If public, show tabs
+        if (isPublic) ...[
+          // Tab bar
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: theme.surface,
+              borderRadius: BorderRadius.circular(12),
             ),
-
-          // If public, show tabs
-          if (isPublic) ...[
-            // Tab bar
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: theme.surface,
-                borderRadius: BorderRadius.circular(12),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: theme.accent,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: TabBar(
-                controller: _tabController,
-                indicator: BoxDecoration(
-                  color: theme.accent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                labelColor: theme.background,
-                unselectedLabelColor: theme.onSurfaceMuted,
-                labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                indicatorSize: TabBarIndicatorSize.tab,
-                dividerHeight: 0,
-                padding: const EdgeInsets.all(3),
-                tabs: const [
-                  Tab(text: 'Playlists'),
-                  Tab(text: 'Library'),
-                ],
+              labelColor: theme.background,
+              unselectedLabelColor: theme.onSurfaceMuted,
+              labelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
+              unselectedLabelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerHeight: 0,
+              padding: const EdgeInsets.all(3),
+              tabs: const [
+                Tab(text: 'Playlists'),
+                Tab(text: 'Library'),
+              ],
             ),
-            const SizedBox(height: 12),
+          ),
+          const SizedBox(height: 12),
 
-            // Tab views
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _PlaylistsTab(
-                    playlists: _playlists,
-                    theme: theme,
-                  ),
-                  _LibraryTab(
-                    library: _library,
-                    theme: theme,
-                  ),
-                ],
-              ),
+          // Tab views
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _PlaylistsTab(playlists: _playlists, theme: theme),
+                _LibraryTab(library: _library, theme: theme),
+              ],
             ),
-          ],
+          ),
+        ],
       ],
     );
   }
@@ -344,16 +341,23 @@ class _PlaylistsTab extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 4,
+            ),
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: songs.isNotEmpty && songs.first['cover_url'] != null && (songs.first['cover_url'] as String).isNotEmpty
+              child:
+                  songs.isNotEmpty &&
+                      songs.first['cover_url'] != null &&
+                      (songs.first['cover_url'] as String).isNotEmpty
                   ? Image.network(
                       songs.first['cover_url'] as String,
                       width: 46,
                       height: 46,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildPlaylistFallback(isPublic, theme),
+                      errorBuilder: (_, __, ___) =>
+                          _buildPlaylistFallback(isPublic, theme),
                     )
                   : _buildPlaylistFallback(isPublic, theme),
             ),
@@ -367,18 +371,22 @@ class _PlaylistsTab extends StatelessWidget {
             ),
             subtitle: Text(
               isPublic ? '${songs.length} tracks' : 'Private playlist',
-              style: TextStyle(
-                color: theme.onSurfaceMuted,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
             ),
             trailing: isPublic
-                ? Icon(PhosphorIconsRegular.caretRight,
-                    color: theme.onSurfaceMuted, size: 16)
+                ? Icon(
+                    PhosphorIconsRegular.caretRight,
+                    color: theme.onSurfaceMuted,
+                    size: 16,
+                  )
                 : null,
-            onTap: isPublic ? () {
-              context.push(AppRoutes.sharedPlaylistPath(playlist['id'].toString()));
-            } : null,
+            onTap: isPublic
+                ? () {
+                    context.push(
+                      AppRoutes.sharedPlaylistPath(playlist['id'].toString()),
+                    );
+                  }
+                : null,
           ),
         );
       },
@@ -397,9 +405,7 @@ class _PlaylistsTab extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Icon(
-        isPublic
-            ? PhosphorIconsFill.musicNotesPlus
-            : PhosphorIconsFill.lock,
+        isPublic ? PhosphorIconsFill.musicNotesPlus : PhosphorIconsFill.lock,
         color: isPublic ? theme.accent : theme.onSurfaceMuted,
         size: 22,
       ),
@@ -432,15 +438,37 @@ class _LibraryTab extends ConsumerWidget {
       slivers: [
         if (tracks.isNotEmpty) ...[
           _buildHeader('Liked Tracks'),
-          _buildList(tracks, icon: PhosphorIconsRegular.musicNote, titleKey: 'title', subtitleKey: 'artist', itemKey: 'track_data', idKey: 'track_id'),
+          _buildList(
+            tracks,
+            icon: PhosphorIconsRegular.musicNote,
+            titleKey: 'title',
+            subtitleKey: 'artist',
+            itemKey: 'track_data',
+            idKey: 'track_id',
+          ),
         ],
         if (albums.isNotEmpty) ...[
           _buildHeader('Liked Albums'),
-          _buildList(albums, icon: PhosphorIconsRegular.disc, titleKey: 'title', subtitleKey: 'artist', itemKey: 'album_data', idKey: 'album_id'),
+          _buildList(
+            albums,
+            icon: PhosphorIconsRegular.disc,
+            titleKey: 'title',
+            subtitleKey: 'artist',
+            itemKey: 'album_data',
+            idKey: 'album_id',
+          ),
         ],
         if (artists.isNotEmpty) ...[
           _buildHeader('Following'),
-          _buildList(artists, icon: PhosphorIconsRegular.microphoneStage, titleKey: 'name', subtitleKey: 'nb_fan', itemKey: 'artist_data', idKey: 'artist_id', isArtist: true),
+          _buildList(
+            artists,
+            icon: PhosphorIconsRegular.microphoneStage,
+            titleKey: 'name',
+            subtitleKey: 'nb_fan',
+            itemKey: 'artist_data',
+            idKey: 'artist_id',
+            isArtist: true,
+          ),
         ],
         const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
       ],
@@ -463,10 +491,11 @@ class _LibraryTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildList(List<Map<String, dynamic>> items, {
-    required IconData icon, 
-    required String titleKey, 
-    required String subtitleKey, 
+  Widget _buildList(
+    List<Map<String, dynamic>> items, {
+    required IconData icon,
+    required String titleKey,
+    required String subtitleKey,
     required String itemKey,
     required String idKey,
     bool isArtist = false,
@@ -474,108 +503,121 @@ class _LibraryTab extends ConsumerWidget {
     return Consumer(
       builder: (context, ref, child) {
         return SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final entry = items[index];
-              final data = entry[itemKey] as Map<String, dynamic>? ?? {};
-              final title = data[titleKey]?.toString() ?? 'Unknown';
-              
-              String subtitle = '';
-              if (isArtist) {
-                final fans = data[subtitleKey] as int? ?? 0;
-                subtitle = '$fans fans';
-              } else {
-                final subData = data[subtitleKey];
-                if (subData is Map) {
-                  subtitle = subData['name']?.toString() ?? 'Unknown';
-                } else {
-                  subtitle = subData?.toString() ?? 'Unknown';
-                }
-              }
-              
-              String? coverUrl;
-              if (itemKey == 'track_data') {
-                if (data['album'] is Map) {
-                  coverUrl = data['album']['cover_medium'] ?? data['album']['cover'];
-                }
-              } else if (itemKey == 'album_data') {
-                coverUrl = data['cover_medium'] ?? data['cover'];
-              } else if (itemKey == 'artist_data') {
-                coverUrl = data['picture_medium'] ?? data['picture'];
-              }
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final entry = items[index];
+            final data = entry[itemKey] as Map<String, dynamic>? ?? {};
+            final title = data[titleKey]?.toString() ?? 'Unknown';
 
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(isArtist ? 99 : 8),
-                    child: coverUrl != null && coverUrl.isNotEmpty
-                        ? Image.network(
-                            coverUrl,
-                            width: 44,
-                            height: 44,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _placeholder(icon, isArtist),
-                          )
-                        : _placeholder(icon, isArtist),
-                  ),
-                  title: Text(
-                    title,
-                    style: TextStyle(
-                      color: theme.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: theme.onSurfaceMuted,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () {
-                    final idStr = entry[idKey]?.toString();
-                    if (idStr == null) return;
-                    final id = int.tryParse(idStr);
-                    if (id == null) return;
-                    
-                    if (isArtist) {
-                      context.push(AppRoutes.artistPath(id));
-                    } else if (idKey == 'album_id') {
-                      context.push(AppRoutes.albumPath(id));
-                    } else if (idKey == 'track_id') {
-                      final tracks = items.map((i) {
-                        final data = i[itemKey] as Map<String, dynamic>? ?? {};
-                        return DeezerTrack(
-                          id: data['id'] ?? 0,
-                          title: data['title'] ?? 'Unknown',
-                          duration: data['duration'] ?? 0,
-                          artist: DeezerArtist(
-                            id: data['artist'] is Map ? (data['artist']['id'] ?? 0) : 0,
-                            name: data['artist'] is Map ? (data['artist']['name'] ?? 'Unknown') : (data['artist']?.toString() ?? 'Unknown'),
-                          ),
-                          album: DeezerAlbum(
-                            id: data['album'] is Map ? (data['album']['id'] ?? 0) : 0,
-                            title: data['album'] is Map ? (data['album']['title'] ?? '') : '',
-                            coverMedium: data['cover_url'] ?? (data['album'] is Map ? data['album']['cover_medium'] : null),
-                          ),
-                        );
-                      }).toList();
-                      final idx = items.indexOf(entry);
-                      ref.read(playerControlsProvider).playTracks(tracks, startIndex: idx);
-                    }
-                  },
+            String subtitle = '';
+            if (isArtist) {
+              final fans = data[subtitleKey] as int? ?? 0;
+              subtitle = '$fans fans';
+            } else {
+              final subData = data[subtitleKey];
+              if (subData is Map) {
+                subtitle = subData['name']?.toString() ?? 'Unknown';
+              } else {
+                subtitle = subData?.toString() ?? 'Unknown';
+              }
+            }
+
+            String? coverUrl;
+            if (itemKey == 'track_data') {
+              if (data['album'] is Map) {
+                coverUrl =
+                    data['album']['cover_medium'] ?? data['album']['cover'];
+              }
+            } else if (itemKey == 'album_data') {
+              coverUrl = data['cover_medium'] ?? data['cover'];
+            } else if (itemKey == 'artist_data') {
+              coverUrl = data['picture_medium'] ?? data['picture'];
+            }
+
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 2,
                 ),
-              );
-            },
-            childCount: items.length,
-          ),
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(isArtist ? 99 : 8),
+                  child: coverUrl != null && coverUrl.isNotEmpty
+                      ? Image.network(
+                          coverUrl,
+                          width: 44,
+                          height: 44,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _placeholder(icon, isArtist),
+                        )
+                      : _placeholder(icon, isArtist),
+                ),
+                title: Text(
+                  title,
+                  style: TextStyle(
+                    color: theme.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  subtitle,
+                  style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () {
+                  final idStr = entry[idKey]?.toString();
+                  if (idStr == null) return;
+                  final id = int.tryParse(idStr);
+                  if (id == null) return;
+
+                  if (isArtist) {
+                    context.push(AppRoutes.artistPath(id));
+                  } else if (idKey == 'album_id') {
+                    context.push(AppRoutes.albumPath(id));
+                  } else if (idKey == 'track_id') {
+                    final tracks = items.map((i) {
+                      final data = i[itemKey] as Map<String, dynamic>? ?? {};
+                      return DeezerTrack(
+                        id: data['id'] ?? 0,
+                        title: data['title'] ?? 'Unknown',
+                        duration: data['duration'] ?? 0,
+                        artist: DeezerArtist(
+                          id: data['artist'] is Map
+                              ? (data['artist']['id'] ?? 0)
+                              : 0,
+                          name: data['artist'] is Map
+                              ? (data['artist']['name'] ?? 'Unknown')
+                              : (data['artist']?.toString() ?? 'Unknown'),
+                        ),
+                        album: DeezerAlbum(
+                          id: data['album'] is Map
+                              ? (data['album']['id'] ?? 0)
+                              : 0,
+                          title: data['album'] is Map
+                              ? (data['album']['title'] ?? '')
+                              : '',
+                          coverMedium:
+                              data['cover_url'] ??
+                              (data['album'] is Map
+                                  ? data['album']['cover_medium']
+                                  : null),
+                        ),
+                      );
+                    }).toList();
+                    final idx = items.indexOf(entry);
+                    ref
+                        .read(playerControlsProvider)
+                        .playTracks(tracks, startIndex: idx);
+                  }
+                },
+              ),
+            );
+          }, childCount: items.length),
         );
       },
     );

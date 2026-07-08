@@ -31,9 +31,7 @@ class WaveContextMenu extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.surface,
         borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 14),
-        border: Border.all(
-          color: theme.onSurface.withValues(alpha: 0.06),
-        ),
+        border: Border.all(color: theme.onSurface.withValues(alpha: 0.06)),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
@@ -84,9 +82,7 @@ class _MenuTile extends StatelessWidget {
           border: Border(
             bottom: isLast
                 ? BorderSide.none
-                : BorderSide(
-                    color: theme.onSurface.withValues(alpha: 0.06),
-                  ),
+                : BorderSide(color: theme.onSurface.withValues(alpha: 0.06)),
           ),
         ),
         child: Row(
@@ -141,10 +137,7 @@ Future<void> showWaveContextMenu({
       );
     },
     transitionBuilder: (context, anim, _, child) {
-      final curved = CurvedAnimation(
-        parent: anim,
-        curve: Curves.easeOutBack,
-      );
+      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
       return Opacity(
         opacity: anim.value,
         child: Transform.scale(

@@ -49,8 +49,10 @@ class _MiniPlayerCard extends ConsumerWidget {
     final isPlaying = state.status == PlaybackStatus.playing;
     final progress = state.duration.inMilliseconds == 0
         ? 0.0
-        : (state.position.inMilliseconds / state.duration.inMilliseconds)
-            .clamp(0.0, 1.0);
+        : (state.position.inMilliseconds / state.duration.inMilliseconds).clamp(
+            0.0,
+            1.0,
+          );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => context.push(AppRoutes.nowPlaying),
@@ -73,7 +75,9 @@ class _MiniPlayerCard extends ConsumerWidget {
           children: <Widget>[
             // Hairline progress on top.
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(14),
+              ),
               child: SizedBox(
                 height: 2.5,
                 child: LinearProgressIndicatorRaw(
@@ -97,12 +101,15 @@ class _MiniPlayerCard extends ConsumerWidget {
                           ? CachedNetworkImage(
                               imageUrl: cover,
                               fit: BoxFit.cover,
-                              placeholder: (c, _) => Container(color: theme.background),
+                              placeholder: (c, _) =>
+                                  Container(color: theme.background),
                               errorWidget: (c, _, _) => Container(
                                 color: theme.accent.withValues(alpha: 0.2),
                               ),
                             )
-                          : Container(color: theme.accent.withValues(alpha: 0.2)),
+                          : Container(
+                              color: theme.accent.withValues(alpha: 0.2),
+                            ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -139,9 +146,8 @@ class _MiniPlayerCard extends ConsumerWidget {
                         ? PhosphorIconsRegular.pause
                         : PhosphorIconsRegular.play,
                     color: theme.onSurface,
-                    onTap: () => ref
-                        .read(playerControlsProvider)
-                        .togglePlayPause(),
+                    onTap: () =>
+                        ref.read(playerControlsProvider).togglePlayPause(),
                   ),
                   _MiniIconButton(
                     icon: PhosphorIconsRegular.skipForward,

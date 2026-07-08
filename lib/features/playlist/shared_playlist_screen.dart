@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -56,8 +57,8 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
         child: _loading
             ? Center(child: CircularProgressIndicator(color: theme.accent))
             : _playlist == null
-                ? _buildNotFound(theme)
-                : _buildPlaylist(theme),
+            ? _buildNotFound(theme)
+            : _buildPlaylist(theme),
       ),
     );
   }
@@ -88,10 +89,7 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Check the ID and try again',
-                  style: TextStyle(
-                    color: theme.onSurfaceMuted,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: theme.onSurfaceMuted, fontSize: 13),
                 ),
               ],
             ),
@@ -124,20 +122,26 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
           ),
           Consumer(
             builder: (context, ref, child) {
-              final isSaved = ref.watch(likedPlaylistsProvider).any((p) => p.title == title);
-              
+              final isSaved = ref
+                  .watch(likedPlaylistsProvider)
+                  .any((p) => p.title == title);
+
               return IconButton(
                 icon: Icon(
-                  isSaved ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                  isSaved
+                      ? PhosphorIconsFill.heart
+                      : PhosphorIconsRegular.heart,
                   color: isSaved ? theme.accent : theme.onSurfaceMuted,
                 ),
                 onPressed: () {
                   final playlistId = _playlist!['id'].hashCode;
                   final internalId = playlistId < 0 ? playlistId : -playlistId;
-                  
+
                   final songs = _playlist!['songs'] as List<dynamic>? ?? [];
-                  final pictureUrl = songs.isNotEmpty ? songs.first['cover_url'] as String? : null;
-                  
+                  final pictureUrl = songs.isNotEmpty
+                      ? songs.first['cover_url'] as String?
+                      : null;
+
                   final dp = DeezerPlaylist(
                     id: internalId,
                     title: title,
@@ -147,27 +151,95 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
                     picture: pictureUrl,
                     pictureMedium: pictureUrl,
                     pictureBig: pictureUrl,
-                    creator: DeezerUser(id: 0, name: _playlist!['profiles']?['display_name'] ?? _playlist!['profiles']?['username'] ?? 'Community'),
+                    creator: DeezerUser(
+                      id: 0,
+                      name:
+                          _playlist!['profiles']?['display_name'] ??
+                          _playlist!['profiles']?['username'] ??
+                          'Community',
+                    ),
                   );
-                  final parsedTracks = songs.map((s) {
-                    final song = s as Map<String, dynamic>;
-                    return DeezerTrack(
-                      id: song['id'] ?? 0,
-                      title: song['title'] ?? 'Unknown',
-                      duration: song['duration'] ?? 0,
-                      artist: DeezerArtist(id: 0, name: song['artist'] ?? 'Unknown'),
-                      album: DeezerAlbum(id: 0, title: '', coverMedium: song['cover_url']),
-                    );
-                  }).toList();
-                  
+                  final parsedTracks = songs
+                      .map((s) {
+                        if (s is! Map) return null;
+                        final song = Map<String, dynamic>.from(s as Map);
+
+                        final artistJson = song['artist'];
+                        DeezerArtist? artist;
+                        if (artistJson is Map) {
+                          final am = Map<String, dynamic>.from(artistJson);
+                          artist = DeezerArtist(
+                            id: int.tryParse(am['id']?.toString() ?? '0') ?? 0,
+                            name: am['name']?.toString() ?? 'Unknown',
+                            picture: am['picture']?.toString(),
+                            pictureSmall: am['picture_small']?.toString(),
+                            pictureMedium: am['picture_medium']?.toString(),
+                            pictureBig: am['picture_big']?.toString(),
+                            pictureXl: am['picture_xl']?.toString(),
+                          );
+                        } else if (artistJson is String) {
+                          artist = DeezerArtist(id: 0, name: artistJson);
+                        }
+
+                        final albumJson = song['album'];
+                        DeezerAlbum? album;
+                        if (albumJson is Map) {
+                          final alm = Map<String, dynamic>.from(albumJson);
+                          album = DeezerAlbum(
+                            id: int.tryParse(alm['id']?.toString() ?? '0') ?? 0,
+                            title: alm['title']?.toString() ?? '',
+                            cover: alm['cover']?.toString(),
+                            coverSmall: alm['cover_small']?.toString(),
+                            coverMedium: alm['cover_medium']?.toString(),
+                            coverBig: alm['cover_big']?.toString(),
+                            coverXl: alm['cover_xl']?.toString(),
+                          );
+                        } else {
+                          final coverUrl = song['cover_url']?.toString();
+                          if (coverUrl != null && coverUrl.isNotEmpty) {
+                            album = DeezerAlbum(
+                              id: 0,
+                              title: '',
+                              cover: coverUrl,
+                              coverSmall: coverUrl,
+                              coverMedium: coverUrl,
+                              coverBig: coverUrl,
+                              coverXl: coverUrl,
+                            );
+                          }
+                        }
+
+                        return DeezerTrack(
+                          id: int.tryParse(song['id']?.toString() ?? '0') ?? 0,
+                          title: song['title']?.toString() ?? 'Unknown',
+                          duration:
+                              int.tryParse(
+                                song['duration']?.toString() ?? '0',
+                              ) ??
+                              0,
+                          artist: artist,
+                          album: album,
+                        );
+                      })
+                      .whereType<DeezerTrack>()
+                      .toList();
+
                   ref.read(likedPlaylistsProvider.notifier).toggle(dp);
                   if (!isSaved) {
                     // Save tracks so they can be loaded if opened from Library -> Liked Playlists
-                    ref.read(localPlaylistTracksProvider.notifier).addTracks(internalId, parsedTracks);
+                    ref
+                        .read(localPlaylistTracksProvider.notifier)
+                        .addTracks(internalId, parsedTracks);
                   }
-                  
+
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isSaved ? 'Removed from Liked Playlists' : 'Saved to Liked Playlists')),
+                    SnackBar(
+                      content: Text(
+                        isSaved
+                            ? 'Removed from Liked Playlists'
+                            : 'Saved to Liked Playlists',
+                      ),
+                    ),
                   );
                 },
               );
@@ -185,16 +257,53 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
     final profile = _playlist!['profiles'] as Map<String, dynamic>? ?? {};
     final creator = profile['display_name'] ?? profile['username'] ?? 'User';
 
-    final parsedTracks = songs.map((s) {
-      final song = s as Map<String, dynamic>;
-      return DeezerTrack(
-        id: song['id'] ?? 0,
-        title: song['title'] ?? 'Unknown',
-        duration: song['duration'] ?? 0,
-        artist: DeezerArtist(id: 0, name: song['artist'] ?? 'Unknown'),
-        album: DeezerAlbum(id: 0, title: '', coverMedium: song['cover_url']),
-      );
-    }).toList();
+    final parsedTracks = songs
+        .map((s) {
+          if (s is! Map) return null;
+          final song = Map<String, dynamic>.from(s as Map);
+
+          final artistJson = song['artist'];
+          DeezerArtist? artist;
+          if (artistJson is Map) {
+            final am = Map<String, dynamic>.from(artistJson);
+            artist = DeezerArtist(
+              id: int.tryParse(am['id']?.toString() ?? '0') ?? 0,
+              name: am['name']?.toString() ?? 'Unknown',
+              picture: am['picture']?.toString(),
+              pictureSmall: am['picture_small']?.toString(),
+              pictureMedium: am['picture_medium']?.toString(),
+              pictureBig: am['picture_big']?.toString(),
+              pictureXl: am['picture_xl']?.toString(),
+            );
+          } else if (artistJson is String) {
+            artist = DeezerArtist(id: 0, name: artistJson);
+          }
+
+          final albumJson = song['album'];
+          DeezerAlbum? album;
+          if (albumJson is Map) {
+            final alm = Map<String, dynamic>.from(albumJson);
+            album = DeezerAlbum(
+              id: int.tryParse(alm['id']?.toString() ?? '0') ?? 0,
+              title: alm['title']?.toString() ?? '',
+              cover: alm['cover']?.toString(),
+              coverSmall: alm['cover_small']?.toString(),
+              coverMedium: alm['cover_medium']?.toString(),
+              coverBig: alm['cover_big']?.toString(),
+              coverXl: alm['cover_xl']?.toString(),
+            );
+          }
+
+          return DeezerTrack(
+            id: int.tryParse(song['id']?.toString() ?? '0') ?? 0,
+            title: song['title']?.toString() ?? 'Unknown',
+            duration: int.tryParse(song['duration']?.toString() ?? '0') ?? 0,
+            artist: artist,
+            album: album,
+          );
+        })
+        .whereType<DeezerTrack>()
+        .toList();
 
     return Column(
       children: [
@@ -204,7 +313,9 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
         // Header
         Builder(
           builder: (context) {
-            final firstCover = parsedTracks.isNotEmpty && parsedTracks.first.album?.coverMedium != null
+            final firstCover =
+                parsedTracks.isNotEmpty &&
+                    parsedTracks.first.album?.coverMedium != null
                 ? parsedTracks.first.album!.coverMedium!
                 : null;
             return ClipRRect(
@@ -240,10 +351,7 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
           },
           child: Text(
             'by $creator · ${songs.length} tracks',
-            style: TextStyle(
-              color: theme.onSurfaceMuted,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: theme.onSurfaceMuted, fontSize: 13),
           ),
         ),
         if (description.isNotEmpty) ...[
@@ -275,27 +383,30 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
                 )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: songs.length,
+                  itemCount: parsedTracks.length,
                   itemBuilder: (context, index) {
-                    final song = songs[index] as Map<String, dynamic>? ?? {};
-                    final title = song['title'] ?? 'Unknown';
-                    final artist = song['artist'] ?? 'Unknown';
-                    final coverUrl = song['cover_url'] as String?;
+                    final track = parsedTracks[index];
+                    final title = track.title;
+                    final artist = track.artist?.name ?? 'Unknown';
+                    final coverUrl =
+                        track.album?.coverMedium ?? track.album?.cover;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 4),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 2),
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: coverUrl != null && coverUrl.isNotEmpty
-                              ? Image.network(
-                                  coverUrl,
+                              ? CachedNetworkImage(
+                                  imageUrl: coverUrl,
                                   width: 44,
                                   height: 44,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) =>
+                                  errorWidget: (_, __, ___) =>
                                       _placeholder(theme),
                                 )
                               : _placeholder(theme),
@@ -327,7 +438,9 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
                           ),
                         ),
                         onTap: () {
-                          ref.read(playerControlsProvider).playTracks(parsedTracks, startIndex: index);
+                          ref
+                              .read(playerControlsProvider)
+                              .playTracks(parsedTracks, startIndex: index);
                         },
                       ),
                     );
@@ -347,8 +460,11 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
         borderRadius: BorderRadius.circular(8),
       ),
       alignment: Alignment.center,
-      child: Icon(PhosphorIconsRegular.musicNote,
-          color: theme.onSurfaceMuted, size: 20),
+      child: Icon(
+        PhosphorIconsRegular.musicNote,
+        color: theme.onSurfaceMuted,
+        size: 20,
+      ),
     );
   }
 
@@ -359,14 +475,13 @@ class _SharedPlaylistScreenState extends ConsumerState<SharedPlaylistScreen> {
       decoration: BoxDecoration(
         color: theme.accent.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(
+          color: theme.accent.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
       ),
       alignment: Alignment.center,
-      child: Icon(
-        PhosphorIconsFill.playlist,
-        color: theme.accent,
-        size: 40,
-      ),
+      child: Icon(PhosphorIconsFill.playlist, color: theme.accent, size: 40),
     );
   }
 }

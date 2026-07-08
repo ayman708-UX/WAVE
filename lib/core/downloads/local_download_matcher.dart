@@ -133,8 +133,9 @@ class LocalDownloadMatcher {
     if (target.id == downloaded.id) return 100000;
 
     final targetTitle = _normalise(target.titleShort ?? target.title);
-    final downloadedTitle =
-        _normalise(downloaded.titleShort ?? downloaded.title);
+    final downloadedTitle = _normalise(
+      downloaded.titleShort ?? downloaded.title,
+    );
     final targetArtist = _normalise(target.artist?.name ?? '');
     final downloadedArtist = _normalise(downloaded.artist?.name ?? '');
 
@@ -202,7 +203,9 @@ class LocalDownloadMatcher {
     if (aWords.isEmpty || bWords.isEmpty) return 0;
 
     final shared = aWords.intersection(bWords).length;
-    final maxWords = aWords.length > bWords.length ? aWords.length : bWords.length;
+    final maxWords = aWords.length > bWords.length
+        ? aWords.length
+        : bWords.length;
     final overlap = shared / maxWords;
 
     var score = (overlap * 1000).round();
@@ -225,7 +228,12 @@ class LocalDownloadMatcher {
     var out = value.toLowerCase();
 
     out = out
-        .replaceAll(RegExp(r'\b(remaster(ed)?|radio edit|single version|album version|explicit|clean|official|audio|video|lyrics?|hd|hq)\b'), ' ')
+        .replaceAll(
+          RegExp(
+            r'\b(remaster(ed)?|radio edit|single version|album version|explicit|clean|official|audio|video|lyrics?|hd|hq)\b',
+          ),
+          ' ',
+        )
         .replaceAll(RegExp(r'\([^)]*\)'), ' ')
         .replaceAll(RegExp(r'\[[^\]]*\]'), ' ')
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')

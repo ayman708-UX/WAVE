@@ -32,10 +32,7 @@ class WaveSubTabs extends StatelessWidget {
             child: AnimatedContainer(
               duration: theme.fastDuration,
               curve: theme.defaultCurve,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: active == i ? theme.accent : Colors.transparent,
                 borderRadius: BorderRadius.circular(

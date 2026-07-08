@@ -5,15 +5,7 @@ import 'deezer_track.dart';
 part 'player_state.freezed.dart';
 
 /// Playback states surfaced by the player layer to the UI.
-enum PlaybackStatus {
-  idle,
-  loading,
-  buffering,
-  playing,
-  paused,
-  ended,
-  error,
-}
+enum PlaybackStatus { idle, loading, buffering, playing, paused, ended, error }
 
 /// Repeat mode mirrors common music-app semantics.
 enum RepeatMode { off, all, one }

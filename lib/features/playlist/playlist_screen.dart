@@ -22,7 +22,6 @@ import '../../widgets/inline_error.dart';
 import '../../widgets/play_shuffle_pair.dart';
 import '../../widgets/shimmer.dart';
 
-
 class PlaylistScreen extends ConsumerStatefulWidget {
   const PlaylistScreen({super.key, required this.playlistId});
   final int playlistId;
@@ -59,7 +58,9 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     AsyncValue<List<DeezerTrack>>? asyncTracks;
 
     if (_isUserPlaylist) {
-      directTracks = ref.watch(localPlaylistTracksProvider)[widget.playlistId] ?? const <DeezerTrack>[];
+      directTracks =
+          ref.watch(localPlaylistTracksProvider)[widget.playlistId] ??
+          const <DeezerTrack>[];
     } else {
       asyncTracks = ref.watch(playlistTracksProvider(widget.playlistId));
     }
@@ -92,7 +93,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                       ref.invalidate(playlistProvider(widget.playlistId)),
                 ),
               ),
-              data: (pl) => _buildBody(theme, pl, asyncTracks, directTracks, isLiked),
+              data: (pl) =>
+                  _buildBody(theme, pl, asyncTracks, directTracks, isLiked),
             ),
           ),
           if (_showCoverViewer)
@@ -115,7 +117,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     List<DeezerTrack>? directTracks,
     bool isLiked,
   ) {
-    final liveTrackCount = directTracks?.length ??
+    final liveTrackCount =
+        directTracks?.length ??
         asyncTracks?.maybeWhen(
           data: (tracks) => tracks.length,
           orElse: () => pl.nbTracks ?? 0,
@@ -143,7 +146,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                           aspectRatio: 1,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(
-                                theme.cardRadius == 0 ? 0 : 12),
+                              theme.cardRadius == 0 ? 0 : 12,
+                            ),
                             child: cover != null
                                 ? CachedNetworkImage(
                                     imageUrl: cover,
@@ -173,19 +177,25 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 const SizedBox(height: 8),
                 PlayShufflePair(
                   onPlay: () {
-                    final tracks = directTracks ?? asyncTracks?.maybeWhen(
-                      data: (t) => t,
-                      orElse: () => const <DeezerTrack>[],
-                    ) ?? const <DeezerTrack>[];
+                    final tracks =
+                        directTracks ??
+                        asyncTracks?.maybeWhen(
+                          data: (t) => t,
+                          orElse: () => const <DeezerTrack>[],
+                        ) ??
+                        const <DeezerTrack>[];
                     if (tracks.isNotEmpty) {
                       ref.read(playerControlsProvider).playTracks(tracks);
                     }
                   },
                   onShuffle: () async {
-                    final tracks = directTracks ?? asyncTracks?.maybeWhen(
-                      data: (t) => t,
-                      orElse: () => const <DeezerTrack>[],
-                    ) ?? const <DeezerTrack>[];
+                    final tracks =
+                        directTracks ??
+                        asyncTracks?.maybeWhen(
+                          data: (t) => t,
+                          orElse: () => const <DeezerTrack>[],
+                        ) ??
+                        const <DeezerTrack>[];
                     if (tracks.isEmpty) return;
                     final controls = ref.read(playerControlsProvider);
                     await controls.setShuffle(true);
@@ -195,10 +205,13 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 const SizedBox(height: 10),
                 _DownloadPlaylistButton(
                   title: pl.title,
-                  tracks: directTracks ?? asyncTracks?.maybeWhen(
-                    data: (t) => t,
-                    orElse: () => const <DeezerTrack>[],
-                  ) ?? const <DeezerTrack>[],
+                  tracks:
+                      directTracks ??
+                      asyncTracks?.maybeWhen(
+                        data: (t) => t,
+                        orElse: () => const <DeezerTrack>[],
+                      ) ??
+                      const <DeezerTrack>[],
                 ),
                 if (_isUserPlaylist) ...[
                   const SizedBox(height: 10),
@@ -206,7 +219,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                     GestureDetector(
                       onTap: () => setState(() => _selectMode = true),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.surface,
                           borderRadius: BorderRadius.circular(12),
@@ -214,9 +230,20 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(PhosphorIconsRegular.pencilSimple, color: theme.onSurface, size: 16),
+                            Icon(
+                              PhosphorIconsRegular.pencilSimple,
+                              color: theme.onSurface,
+                              size: 16,
+                            ),
                             const SizedBox(width: 8),
-                            Text('Edit Tracks', style: TextStyle(color: theme.onSurface, fontSize: 13, fontWeight: FontWeight.w600)),
+                            Text(
+                              'Edit Tracks',
+                              style: TextStyle(
+                                color: theme.onSurface,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -226,7 +253,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                       children: [
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() { _selectMode = false; _selectedTrackIds.clear(); }),
+                            onTap: () => setState(() {
+                              _selectMode = false;
+                              _selectedTrackIds.clear();
+                            }),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
@@ -234,35 +264,68 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               alignment: Alignment.center,
-                              child: Text('Cancel', style: TextStyle(color: theme.onSurfaceMuted, fontSize: 13, fontWeight: FontWeight.w600)),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: theme.onSurfaceMuted,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: GestureDetector(
-                            onTap: _selectedTrackIds.isEmpty ? null : () async {
-                              await ref.read(localPlaylistTracksProvider.notifier).removeTracks(widget.playlistId, _selectedTrackIds.toList());
-                              ref.invalidate(playlistProvider(widget.playlistId));
-                              final count = _selectedTrackIds.length;
-                              setState(() { _selectMode = false; _selectedTrackIds.clear(); });
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Removed $count track${count == 1 ? '' : 's'}')),
-                                );
-                              }
-                            },
+                            onTap: _selectedTrackIds.isEmpty
+                                ? null
+                                : () async {
+                                    await ref
+                                        .read(
+                                          localPlaylistTracksProvider.notifier,
+                                        )
+                                        .removeTracks(
+                                          widget.playlistId,
+                                          _selectedTrackIds.toList(),
+                                        );
+                                    ref.invalidate(
+                                      playlistProvider(widget.playlistId),
+                                    );
+                                    final count = _selectedTrackIds.length;
+                                    setState(() {
+                                      _selectMode = false;
+                                      _selectedTrackIds.clear();
+                                    });
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Removed $count track${count == 1 ? '' : 's'}',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: _selectedTrackIds.isEmpty ? theme.error.withValues(alpha: 0.3) : theme.error,
+                                color: _selectedTrackIds.isEmpty
+                                    ? theme.error.withValues(alpha: 0.3)
+                                    : theme.error,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                _selectedTrackIds.isEmpty ? 'Select tracks' : 'Remove (${_selectedTrackIds.length})',
+                                _selectedTrackIds.isEmpty
+                                    ? 'Select tracks'
+                                    : 'Remove (${_selectedTrackIds.length})',
                                 style: TextStyle(
-                                  color: _selectedTrackIds.isEmpty ? theme.error : theme.background,
+                                  color: _selectedTrackIds.isEmpty
+                                      ? theme.error
+                                      : theme.background,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -285,15 +348,17 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         else
           ...(asyncTracks!.hasValue
               ? (_isUserPlaylist
-                  ? <Widget>[_userReorderableList(asyncTracks.value!)]
-                  : <Widget>[_staticList(asyncTracks.value!)])
+                    ? <Widget>[_userReorderableList(asyncTracks.value!)]
+                    : <Widget>[_staticList(asyncTracks.value!)])
               : asyncTracks.when(
                   loading: () => <Widget>[
                     SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, _) => Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 6),
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
                           child: ShimmerBox(
                             width: MediaQuery.of(context).size.width - 32,
                             height: 56,
@@ -310,7 +375,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                         child: InlineError(
                           message: 'Could not load tracks',
                           onRetry: () => ref.invalidate(
-                              playlistTracksProvider(widget.playlistId)),
+                            playlistTracksProvider(widget.playlistId),
+                          ),
                         ),
                       ),
                     ),
@@ -368,11 +434,18 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
               if (!_isUserPlaylist)
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => ref.read(likedPlaylistsProvider.notifier).toggle(pl),
+                  onTap: () =>
+                      ref.read(likedPlaylistsProvider.notifier).toggle(pl),
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 12, bottom: 12, right: 12),
+                    padding: const EdgeInsets.only(
+                      top: 12,
+                      bottom: 12,
+                      right: 12,
+                    ),
                     child: Icon(
-                      isLiked ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                      isLiked
+                          ? PhosphorIconsFill.heart
+                          : PhosphorIconsRegular.heart,
                       color: isLiked ? theme.accent : theme.onSurface,
                       size: 22,
                     ),
@@ -406,10 +479,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           Text(
             pl.description!,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: theme.onSurfaceMuted,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
           ),
         ],
         const SizedBox(height: 6),
@@ -421,10 +491,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
             if (mins > 0) '${mins}m',
           ].join('  ·  '),
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: theme.onSurfaceMuted,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
         ),
       ],
     );
@@ -434,17 +501,17 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     return Column(
       children: <Widget>[
         _UnderlineField(
-          controller: _titleCtrl..text = _titleCtrl.text.isEmpty
-              ? pl.title
-              : _titleCtrl.text,
+          controller: _titleCtrl
+            ..text = _titleCtrl.text.isEmpty ? pl.title : _titleCtrl.text,
           hint: 'Title',
           fontSize: 20,
         ),
         const SizedBox(height: 10),
         _UnderlineField(
-          controller: _descCtrl..text = _descCtrl.text.isEmpty
-              ? (pl.description ?? '')
-              : _descCtrl.text,
+          controller: _descCtrl
+            ..text = _descCtrl.text.isEmpty
+                ? (pl.description ?? '')
+                : _descCtrl.text,
           hint: 'Description',
           fontSize: 12,
         ),
@@ -470,7 +537,9 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
             background: theme.accent,
             color: theme.background,
             onTap: () async {
-              await ref.read(userPlaylistsProvider.notifier).updatePlaylist(
+              await ref
+                  .read(userPlaylistsProvider.notifier)
+                  .updatePlaylist(
                     pl.id,
                     title: _titleCtrl.text.trim(),
                     description: _descCtrl.text.trim().isEmpty
@@ -501,7 +570,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   backgroundColor: theme.surface,
                   title: Text(
                     'Delete Playlist',
-                    style: TextStyle(color: theme.onSurface, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: theme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   content: Text(
                     'Are you sure you want to delete "${pl.title}"? This cannot be undone.',
@@ -550,10 +622,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: theme.surface,
-            borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
-            border: Border.all(
-              color: theme.onSurface.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(
+              theme.cardRadius == 0 ? 0 : 999,
             ),
+            border: Border.all(color: theme.onSurface.withValues(alpha: 0.12)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -596,7 +668,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
             final downloaded = ref.watch(downloadedTracksProvider);
             final playlistTracks =
                 ref.watch(localPlaylistTracksProvider)[widget.playlistId] ??
-                    const <DeezerTrack>[];
+                const <DeezerTrack>[];
             final existingIds = playlistTracks.map((t) => t.id).toSet();
             final available = downloaded
                 .where((track) => !existingIds.contains(track.id))
@@ -662,7 +734,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                                 itemCount: available.length,
                                 itemBuilder: (context, i) {
                                   final track = available[i];
-                                  final cover = track.album?.coverMedium ??
+                                  final cover =
+                                      track.album?.coverMedium ??
                                       track.album?.cover ??
                                       track.album?.coverSmall;
 
@@ -679,14 +752,19 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                                                 imageUrl: cover,
                                                 fit: BoxFit.cover,
                                                 placeholder: (_, _) =>
-                                                    ColoredBox(color: theme.background),
+                                                    ColoredBox(
+                                                      color: theme.background,
+                                                    ),
                                                 errorWidget: (_, _, _) =>
-                                                    ColoredBox(color: theme.background),
+                                                    ColoredBox(
+                                                      color: theme.background,
+                                                    ),
                                               )
                                             : ColoredBox(
                                                 color: theme.background,
                                                 child: Icon(
-                                                  PhosphorIconsRegular.musicNotes,
+                                                  PhosphorIconsRegular
+                                                      .musicNotes,
                                                   color: theme.onSurfaceMuted,
                                                 ),
                                               ),
@@ -716,10 +794,15 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                                     ),
                                     onTap: () async {
                                       await ref
-                                          .read(localPlaylistTracksProvider.notifier)
+                                          .read(
+                                            localPlaylistTracksProvider
+                                                .notifier,
+                                          )
                                           .addTrack(widget.playlistId, track);
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               'Added "${track.title}" to playlist',
@@ -805,13 +888,13 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         );
       },
       itemCount: tracks.length,
-      onReorder: _selectMode ? (_, __) {} : (oldIndex, newIndex) {
-        ref.read(localPlaylistTracksProvider.notifier).reorderTrack(
-              widget.playlistId,
-              oldIndex,
-              newIndex,
-            );
-      },
+      onReorder: _selectMode
+          ? (_, __) {}
+          : (oldIndex, newIndex) {
+              ref
+                  .read(localPlaylistTracksProvider.notifier)
+                  .reorderTrack(widget.playlistId, oldIndex, newIndex);
+            },
     );
   }
 
@@ -939,9 +1022,7 @@ class _UnderlineField extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: theme.onSurface.withValues(alpha: 0.25),
-          ),
+          bottom: BorderSide(color: theme.onSurface.withValues(alpha: 0.25)),
         ),
       ),
       child: TextField(
@@ -970,12 +1051,8 @@ class _UnderlineField extends StatelessWidget {
   }
 }
 
-
 class _DownloadPlaylistButton extends ConsumerWidget {
-  const _DownloadPlaylistButton({
-    required this.title,
-    required this.tracks,
-  });
+  const _DownloadPlaylistButton({required this.title, required this.tracks});
 
   final String title;
   final List<DeezerTrack> tracks;
@@ -997,11 +1074,15 @@ class _DownloadPlaylistButton extends ConsumerWidget {
           : () {
               if (allOnDevice) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Playlist is already on device: $title')),
+                  SnackBar(
+                    content: Text('Playlist is already on device: $title'),
+                  ),
                 );
                 return;
               }
-              ref.read(downloadManagerProvider).queueTracks(
+              ref
+                  .read(downloadManagerProvider)
+                  .queueTracks(
                     coverage.missingTracks,
                     title: coverage.partiallyOnDevice
                         ? 'Missing playlist tracks: $title'
@@ -1050,8 +1131,8 @@ class _DownloadPlaylistButton extends ConsumerWidget {
                 allOnDevice
                     ? 'Playlist on device'
                     : (coverage.partiallyOnDevice
-                        ? 'Download missing (${coverage.missing})'
-                        : 'Download playlist'),
+                          ? 'Download missing (${coverage.missing})'
+                          : 'Download playlist'),
                 style: TextStyle(
                   color: allOnDevice ? theme.accent : theme.onSurface,
                   fontSize: 13,

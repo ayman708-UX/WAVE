@@ -46,10 +46,7 @@ class SupabaseAuthService {
       final response = await _auth.signUp(
         email: email,
         password: password,
-        data: {
-          'username': username,
-          'display_name': displayName,
-        },
+        data: {'username': username, 'display_name': displayName},
       );
 
       // The trigger creates a row with defaults. We need to update it

@@ -92,7 +92,9 @@ class _PlayPauseButtonState extends State<PlayPauseButton>
                     child: ScaleTransition(scale: anim, child: child),
                   ),
                   child: Icon(
-                    widget.isPlaying ? PhosphorIconsFill.pause : PhosphorIconsFill.play,
+                    widget.isPlaying
+                        ? PhosphorIconsFill.pause
+                        : PhosphorIconsFill.play,
                     key: ValueKey<bool>(widget.isPlaying),
                     color: fg,
                     size: widget.size * 0.42,

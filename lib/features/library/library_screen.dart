@@ -84,25 +84,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ),
               child: switch (_tab) {
                 0 => const KeyedSubtree(
-                    key: ValueKey<String>('liked'),
-                    child: _LikedTracksTab(),
-                  ),
+                  key: ValueKey<String>('liked'),
+                  child: _LikedTracksTab(),
+                ),
                 1 => const KeyedSubtree(
-                    key: ValueKey<String>('albums'),
-                    child: _LikedAlbumsTab(),
-                  ),
+                  key: ValueKey<String>('albums'),
+                  child: _LikedAlbumsTab(),
+                ),
                 2 => const KeyedSubtree(
-                    key: ValueKey<String>('playlists'),
-                    child: _PlaylistsTab(),
-                  ),
+                  key: ValueKey<String>('playlists'),
+                  child: _PlaylistsTab(),
+                ),
                 3 => const KeyedSubtree(
-                    key: ValueKey<String>('following'),
-                    child: _FollowingTab(),
-                  ),
+                  key: ValueKey<String>('following'),
+                  child: _FollowingTab(),
+                ),
                 _ => const KeyedSubtree(
-                    key: ValueKey<String>('downloads'),
-                    child: _DownloadsTab(),
-                  ),
+                  key: ValueKey<String>('downloads'),
+                  child: _DownloadsTab(),
+                ),
               },
             ),
           ),
@@ -209,39 +209,28 @@ class _LikedTracksTab extends ConsumerWidget {
           ),
         ),
         SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, i) {
-              final t = tracks[i];
-              return SwipeActionRow(
-                trailingIcon: PhosphorIconsRegular.heartBreak,
-                trailingColor: theme.error,
-                trailingLabel: 'Unlike',
-                onTrailing: () =>
-                    ref.read(likedTracksProvider.notifier).remove(t.id),
-                leadingIcon: PhosphorIconsRegular.queue,
-                leadingColor: theme.accent,
-                leadingLabel: 'Queue',
-                onLeading: () async {
-                  await ref.read(playerControlsProvider).addToQueueLast(t);
-                },
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPressStart: (d) => _openTrackMenu(
-                    context,
-                    ref,
-                    t,
-                    d.globalPosition,
-                  ),
-                  child: TrackRow(
-                    track: t,
-                    queue: tracks,
-                    indexInQueue: i,
-                  ),
-                ),
-              );
-            },
-            childCount: tracks.length,
-          ),
+          delegate: SliverChildBuilderDelegate((context, i) {
+            final t = tracks[i];
+            return SwipeActionRow(
+              trailingIcon: PhosphorIconsRegular.heartBreak,
+              trailingColor: theme.error,
+              trailingLabel: 'Unlike',
+              onTrailing: () =>
+                  ref.read(likedTracksProvider.notifier).remove(t.id),
+              leadingIcon: PhosphorIconsRegular.queue,
+              leadingColor: theme.accent,
+              leadingLabel: 'Queue',
+              onLeading: () async {
+                await ref.read(playerControlsProvider).addToQueueLast(t);
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPressStart: (d) =>
+                    _openTrackMenu(context, ref, t, d.globalPosition),
+                child: TrackRow(track: t, queue: tracks, indexInQueue: i),
+              ),
+            );
+          }, childCount: tracks.length),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
@@ -391,9 +380,7 @@ class _LikedTracksTab extends ConsumerWidget {
           position: Tween<Offset>(
             begin: const Offset(0, 1),
             end: Offset.zero,
-          ).animate(
-            CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
-          ),
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutBack)),
           child: FadeTransition(opacity: anim, child: child),
         );
       },
@@ -440,8 +427,8 @@ class _LikedAlbumsTab extends ConsumerWidget {
     final cols = AppBreakpoints.isDesktop(context)
         ? 4
         : AppBreakpoints.isTablet(context)
-            ? 3
-            : 2;
+        ? 3
+        : 2;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       physics: const BouncingScrollPhysics(),
@@ -489,7 +476,8 @@ class _PlaylistsTab extends ConsumerWidget {
             child: _EmptyHint(
               icon: PhosphorIconsRegular.playlist,
               title: 'No playlists yet',
-              subtitle: 'Tap "Create playlist" or like a playlist to save it here.',
+              subtitle:
+                  'Tap "Create playlist" or like a playlist to save it here.',
             ),
           ),
         ],
@@ -516,11 +504,19 @@ class _PlaylistsTab extends ConsumerWidget {
                 trailingIcon: PhosphorIconsRegular.trash,
                 trailingColor: theme.error,
                 trailingLabel: 'Delete',
-                onTrailing: () => ref.read(userPlaylistsProvider.notifier).delete(p.id),
-                child: _buildPlaylistRow(context, theme, p, isLocal: true, index: i),
+                onTrailing: () =>
+                    ref.read(userPlaylistsProvider.notifier).delete(p.id),
+                child: _buildPlaylistRow(
+                  context,
+                  theme,
+                  p,
+                  isLocal: true,
+                  index: i,
+                ),
               );
             },
-            onReorder: (a, b) => ref.read(userPlaylistsProvider.notifier).reorder(a, b),
+            onReorder: (a, b) =>
+                ref.read(userPlaylistsProvider.notifier).reorder(a, b),
           ),
         ],
         if (likedLists.isNotEmpty) ...<Widget>[
@@ -536,7 +532,8 @@ class _PlaylistsTab extends ConsumerWidget {
                 trailingIcon: PhosphorIconsRegular.heartBreak,
                 trailingColor: theme.error,
                 trailingLabel: 'Unlike',
-                onTrailing: () => ref.read(likedPlaylistsProvider.notifier).toggle(p),
+                onTrailing: () =>
+                    ref.read(likedPlaylistsProvider.notifier).toggle(p),
                 child: _buildPlaylistRow(context, theme, p, isLocal: false),
               );
             },
@@ -546,28 +543,23 @@ class _PlaylistsTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildCreateButton(BuildContext context, AppTheme theme, WidgetRef ref) {
+  Widget _buildCreateButton(
+    BuildContext context,
+    AppTheme theme,
+    WidgetRef ref,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _openCreate(context, ref),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: theme.accent,
-          borderRadius: BorderRadius.circular(
-            theme.cardRadius == 0 ? 0 : 12,
-          ),
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 12),
         ),
         child: Row(
           children: <Widget>[
-            Icon(
-              PhosphorIconsRegular.plus,
-              color: theme.background,
-              size: 18,
-            ),
+            Icon(PhosphorIconsRegular.plus, color: theme.background, size: 18),
             const SizedBox(width: 10),
             Text(
               'Create playlist',
@@ -600,9 +592,7 @@ class _PlaylistsTab extends ConsumerWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: theme.surface,
-          borderRadius: BorderRadius.circular(
-            theme.cardRadius == 0 ? 0 : 10,
-          ),
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 10),
         ),
         child: Row(
           children: <Widget>[
@@ -649,10 +639,7 @@ class _PlaylistsTab extends ConsumerWidget {
                     isLocal
                         ? '${p.nbTracks ?? 0} tracks'
                         : 'Playlist · by ${p.creator?.name ?? 'Deezer'}',
-                    style: TextStyle(
-                      color: theme.onSurfaceMuted,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12),
                   ),
                 ],
               ),
@@ -661,7 +648,10 @@ class _PlaylistsTab extends ConsumerWidget {
               ReorderableDragStartListener(
                 index: index,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   child: Icon(
                     PhosphorIconsRegular.dotsSixVertical,
                     color: theme.onSurfaceMuted,
@@ -745,7 +735,9 @@ class _PlaylistsTab extends ConsumerWidget {
                     Row(
                       children: [
                         Icon(
-                          isPublic ? PhosphorIconsRegular.globe : PhosphorIconsRegular.lock,
+                          isPublic
+                              ? PhosphorIconsRegular.globe
+                              : PhosphorIconsRegular.lock,
                           color: theme.accent,
                           size: 18,
                         ),
@@ -773,10 +765,8 @@ class _PlaylistsTab extends ConsumerWidget {
                       children: <Widget>[
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: () => Navigator.of(
-                            context,
-                            rootNavigator: true,
-                          ).pop(),
+                          onTap: () =>
+                              Navigator.of(context, rootNavigator: true).pop(),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -809,17 +799,16 @@ class _PlaylistsTab extends ConsumerWidget {
                                 );
                             // Sync to Supabase if signed in
                             if (ref.read(isSignedInProvider)) {
-                              ref.read(supabasePlaylistSyncProvider).syncPlaylist(
-                                playlist: pl,
-                                tracks: const [],
-                                isPublic: isPublic,
-                              );
+                              ref
+                                  .read(supabasePlaylistSyncProvider)
+                                  .syncPlaylist(
+                                    playlist: pl,
+                                    tracks: const [],
+                                    isPublic: isPublic,
+                                  );
                             }
                             if (context.mounted) {
-                              Navigator.of(
-                                context,
-                                rootNavigator: true,
-                              ).pop();
+                              Navigator.of(context, rootNavigator: true).pop();
                             }
                           },
                           child: Container(
@@ -856,30 +845,27 @@ class _PlaylistsTab extends ConsumerWidget {
           position: Tween<Offset>(
             begin: const Offset(0, 1),
             end: Offset.zero,
-          ).animate(
-            CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
-          ),
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
           child: child,
         );
       },
     );
   }
 
-  Widget _buildImportButton(BuildContext context, AppTheme theme, WidgetRef ref) {
+  Widget _buildImportButton(
+    BuildContext context,
+    AppTheme theme,
+    WidgetRef ref,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _openImport(context, ref),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: theme.surface,
           border: Border.all(color: theme.onSurface.withValues(alpha: 0.12)),
-          borderRadius: BorderRadius.circular(
-            theme.cardRadius == 0 ? 0 : 12,
-          ),
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 12),
         ),
         child: Row(
           children: <Widget>[
@@ -966,8 +952,8 @@ class _FollowingTab extends ConsumerWidget {
     final cols = AppBreakpoints.isDesktop(context)
         ? 5
         : AppBreakpoints.isTablet(context)
-            ? 4
-            : 3;
+        ? 4
+        : 3;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       physics: const BouncingScrollPhysics(),
@@ -1362,7 +1348,9 @@ class _DownloadKpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = AppThemeScope.of(context);
-    final border = active ? theme.accent : theme.onSurface.withValues(alpha: 0.10);
+    final border = active
+        ? theme.accent
+        : theme.onSurface.withValues(alpha: 0.10);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1371,12 +1359,8 @@ class _DownloadKpiCard extends StatelessWidget {
         duration: theme.fastDuration,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: active
-              ? theme.accent.withValues(alpha: 0.12)
-              : theme.surface,
-          borderRadius: BorderRadius.circular(
-            theme.cardRadius == 0 ? 0 : 16,
-          ),
+          color: active ? theme.accent.withValues(alpha: 0.12) : theme.surface,
+          borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 16),
           border: Border.all(color: border),
         ),
         child: Row(
@@ -1513,10 +1497,7 @@ class _DownloadsSearchField extends StatelessWidget {
         suffixIcon: onClear == null
             ? null
             : IconButton(
-                icon: Icon(
-                  PhosphorIconsRegular.x,
-                  color: theme.onSurfaceMuted,
-                ),
+                icon: Icon(PhosphorIconsRegular.x, color: theme.onSurfaceMuted),
                 onPressed: onClear,
               ),
         filled: true,
@@ -1539,9 +1520,7 @@ class _DownloadsSearchField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 16),
-          borderSide: BorderSide(
-            color: theme.accent.withValues(alpha: 0.7),
-          ),
+          borderSide: BorderSide(color: theme.accent.withValues(alpha: 0.7)),
         ),
       ),
     );
@@ -1572,7 +1551,8 @@ class _DownloadedTrackTile extends ConsumerWidget {
     final theme = AppThemeScope.of(context);
     final playlists = ref.watch(playlistsForTrackProvider(track.id));
     final inPlaylist = playlists.isNotEmpty;
-    final cover = track.album?.coverMedium ??
+    final cover =
+        track.album?.coverMedium ??
         track.album?.cover ??
         track.album?.coverSmall;
 
@@ -1584,8 +1564,8 @@ class _DownloadedTrackTile extends ConsumerWidget {
           onTap: selectionMode
               ? onToggleSelected
               : () => ref
-                  .read(playerControlsProvider)
-                  .playTracks(queue, startIndex: indexInQueue),
+                    .read(playerControlsProvider)
+                    .playTracks(queue, startIndex: indexInQueue),
           onLongPress: onEnterSelection,
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -2001,12 +1981,14 @@ class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
                 icon: PhosphorIconsRegular.folderOpen,
                 onTap: () async {
                   try {
-                    await ref.read(downloadManagerProvider).openDownloadsFolder();
+                    await ref
+                        .read(downloadManagerProvider)
+                        .openDownloadsFolder();
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.toString())),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(e.toString())));
                     }
                   }
                 },
@@ -2355,10 +2337,7 @@ class _UnderlineField extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           border: InputBorder.none,
           hintText: hint,
-          hintStyle: TextStyle(
-            color: theme.onSurfaceMuted,
-            fontSize: 14,
-          ),
+          hintStyle: TextStyle(color: theme.onSurfaceMuted, fontSize: 14),
         ),
       ),
     );

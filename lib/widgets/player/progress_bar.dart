@@ -34,8 +34,9 @@ class _WaveProgressBarState extends State<WaveProgressBar> {
         .clamp(0.0, 1.0);
   }
 
-  Duration _duration() =>
-      widget.duration > Duration.zero ? widget.duration : const Duration(seconds: 1);
+  Duration _duration() => widget.duration > Duration.zero
+      ? widget.duration
+      : const Duration(seconds: 1);
 
   void _setFromX(double dx, double width) {
     final ratio = (dx / width).clamp(0.0, 1.0);
@@ -52,7 +53,7 @@ class _WaveProgressBarState extends State<WaveProgressBar> {
         final bufferedRatio = widget.duration.inMilliseconds <= 0
             ? 0.0
             : (widget.buffered.inMilliseconds / widget.duration.inMilliseconds)
-                .clamp(0.0, 1.0);
+                  .clamp(0.0, 1.0);
         final dragging = _dragValue != null;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -161,7 +162,12 @@ class _ProgressPainter extends CustomPainter {
     );
     canvas.drawRRect(trackRect, Paint()..color = track);
     final bufferedRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, cy - trackHeight / 2, size.width * bufferedRatio, trackHeight),
+      Rect.fromLTWH(
+        0,
+        cy - trackHeight / 2,
+        size.width * bufferedRatio,
+        trackHeight,
+      ),
       const Radius.circular(2),
     );
     canvas.drawRRect(bufferedRect, Paint()..color = buffered);
@@ -172,11 +178,7 @@ class _ProgressPainter extends CustomPainter {
     canvas.drawRRect(filledRect, Paint()..color = filled);
     final thumbX = size.width * ratio;
     final thumbR = showThumb ? 7.0 : 4.0;
-    canvas.drawCircle(
-      Offset(thumbX, cy),
-      thumbR,
-      Paint()..color = thumb,
-    );
+    canvas.drawCircle(Offset(thumbX, cy), thumbR, Paint()..color = thumb);
   }
 
   @override

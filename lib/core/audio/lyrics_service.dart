@@ -52,13 +52,12 @@ class LrcLibLyricsService implements LyricsService {
     try {
       final res = await _dio.get<List<dynamic>>(
         'https://lrclib.net/api/search',
-        queryParameters: {
-          'q': '$cleanArtist $cleanTitle',
-        },
+        queryParameters: {'q': '$cleanArtist $cleanTitle'},
       );
       if (res.statusCode == 200 && res.data != null && res.data!.isNotEmpty) {
         final best = res.data!.first as Map<String, dynamic>;
-        return best['syncedLyrics'] as String? ?? best['plainLyrics'] as String?;
+        return best['syncedLyrics'] as String? ??
+            best['plainLyrics'] as String?;
       }
     } catch (e) {
       debugPrint('lrclib search error: $e');
@@ -67,7 +66,12 @@ class LrcLibLyricsService implements LyricsService {
     return null;
   }
 
-  Future<String?> _get(String title, String artist, String? album, int? duration) async {
+  Future<String?> _get(
+    String title,
+    String artist,
+    String? album,
+    int? duration,
+  ) async {
     try {
       final query = <String, dynamic>{
         'artist_name': artist,
@@ -83,7 +87,8 @@ class LrcLibLyricsService implements LyricsService {
 
       if (res.statusCode == 200 && res.data != null) {
         final data = res.data!;
-        return data['syncedLyrics'] as String? ?? data['plainLyrics'] as String?;
+        return data['syncedLyrics'] as String? ??
+            data['plainLyrics'] as String?;
       }
     } catch (e) {
       if (e is DioException && e.response?.statusCode != 404) {
@@ -180,7 +185,8 @@ class AzLyricsService implements LyricsService {
   }
 
   String? _parseAzHtml(String html) {
-    const startMarker = '<!-- Usage of azlyrics.com content by any third-party lyrics provider is prohibited by our licensing agreement. Sorry about that. -->';
+    const startMarker =
+        '<!-- Usage of azlyrics.com content by any third-party lyrics provider is prohibited by our licensing agreement. Sorry about that. -->';
     final startIndex = html.indexOf(startMarker);
     if (startIndex == -1) return null;
 
@@ -198,19 +204,20 @@ class AzLyricsService implements LyricsService {
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .trim();
-        
+
     return plainText;
   }
 }
-
 
 final lyricsServiceProvider = Provider<LyricsService>((ref) {
   // Use a standard browser User-Agent for AZLyrics scraping
   final dio = Dio(
     BaseOptions(
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
       },
       followRedirects: true,
@@ -220,14 +227,12 @@ final lyricsServiceProvider = Provider<LyricsService>((ref) {
   dio.httpClientAdapter = IOHttpClientAdapter(
     createHttpClient: () {
       final client = HttpClient();
-      client.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      client.badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
       return client;
     },
   );
-  return CompositeLyricsService(
-    AzLyricsService(dio),
-    LrcLibLyricsService(dio),
-  );
+  return CompositeLyricsService(AzLyricsService(dio), LrcLibLyricsService(dio));
 });
 
 /// One parsed lyric line.
@@ -239,7 +244,11 @@ class LyricLine {
 
 /// Parsed lyrics for a track. `lines` is empty when no lyrics found.
 class TrackLyrics {
-  const TrackLyrics({required this.trackId, required this.lines, this.synced = false});
+  const TrackLyrics({
+    required this.trackId,
+    required this.lines,
+    this.synced = false,
+  });
   final int trackId;
   final List<LyricLine> lines;
   final bool synced;
@@ -248,8 +257,10 @@ class TrackLyrics {
 }
 
 /// Async lyric loader for a given track.
-final lyricsForTrackProvider =
-    FutureProvider.family<TrackLyrics, DeezerTrack>((ref, track) async {
+final lyricsForTrackProvider = FutureProvider.family<TrackLyrics, DeezerTrack>((
+  ref,
+  track,
+) async {
   final svc = ref.watch(lyricsServiceProvider);
   final lyricTitle = _lyricsTitle(track);
   final lyricArtist = _lyricsArtist(track);
@@ -268,12 +279,7 @@ final lyricsForTrackProvider =
     try {
       final parsed = Lrc.parse(raw);
       final lines = parsed.lyrics
-          .map(
-            (l) => LyricLine(
-              timestamp: l.timestamp,
-              text: l.lyrics,
-            ),
-          )
+          .map((l) => LyricLine(timestamp: l.timestamp, text: l.lyrics))
           .toList(growable: false);
       return TrackLyrics(trackId: track.id, lines: lines, synced: true);
     } catch (_) {
@@ -288,13 +294,14 @@ final lyricsForTrackProvider =
   return TrackLyrics(trackId: track.id, lines: plain);
 });
 
-
 bool _isYoutubeLyricsTrack(DeezerTrack track) =>
     track.link?.startsWith('wave://youtube') == true || track.id < 0;
 
 String _lyricsTitle(DeezerTrack track) {
   final titleShort = track.titleShort?.trim();
-  if (_isYoutubeLyricsTrack(track) && titleShort != null && titleShort.isNotEmpty) {
+  if (_isYoutubeLyricsTrack(track) &&
+      titleShort != null &&
+      titleShort.isNotEmpty) {
     return _cleanLyricsText(titleShort);
   }
   return _cleanLyricsText(track.title);

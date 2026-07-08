@@ -1,14 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Identifier for each of the six built-in themes.
-enum AppThemeId {
-  obsidian,
-  vapor,
-  brutalist,
-  aurora,
-  neonGrid,
-  minimalMono,
-}
+enum AppThemeId { obsidian, vapor, brutalist, aurora, neonGrid, minimalMono }
 
 /// Animation personality for a theme.
 enum AnimationPersonality { snappy, floaty, punchy, smooth, instant, crossfade }
@@ -97,11 +90,7 @@ class AppTheme {
 /// Inherited widget that exposes the active [AppTheme] to the entire widget
 /// tree. Use `AppThemeScope.of(context)` instead of `Theme.of(context)`.
 class AppThemeScope extends InheritedWidget {
-  const AppThemeScope({
-    super.key,
-    required this.theme,
-    required super.child,
-  });
+  const AppThemeScope({super.key, required this.theme, required super.child});
 
   final AppTheme theme;
 

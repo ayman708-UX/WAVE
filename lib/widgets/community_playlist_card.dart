@@ -19,18 +19,16 @@ class CommunityPlaylistCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playlist = communityPlaylist.playlist;
-    
+
     return CoverCard(
-      imageUrl: playlist.pictureBig ?? playlist.pictureMedium ?? playlist.picture,
+      imageUrl:
+          playlist.pictureBig ?? playlist.pictureMedium ?? playlist.picture,
       title: playlist.title,
       subtitle: 'By @${communityPlaylist.creatorName}',
       size: size,
       onTap: () {
         // Navigate to the community playlist screen using extra
-        context.push(
-          AppRoutes.communityPlaylist,
-          extra: communityPlaylist,
-        );
+        context.push(AppRoutes.communityPlaylist, extra: communityPlaylist);
       },
     );
   }

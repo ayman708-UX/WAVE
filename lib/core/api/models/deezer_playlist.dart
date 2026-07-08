@@ -15,7 +15,8 @@ abstract class DeezerPlaylist with _$DeezerPlaylist {
     String? description,
     int? duration,
     @JsonKey(fromJson: boolFromJson, toJson: boolToJson) bool? public,
-    @JsonKey(name: 'is_loved_track', fromJson: boolFromJson, toJson: boolToJson) bool? isLovedTrack,
+    @JsonKey(name: 'is_loved_track', fromJson: boolFromJson, toJson: boolToJson)
+    bool? isLovedTrack,
     @JsonKey(fromJson: boolFromJson, toJson: boolToJson) bool? collaborative,
     @JsonKey(name: 'nb_tracks') int? nbTracks,
     int? fans,

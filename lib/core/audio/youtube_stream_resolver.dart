@@ -75,10 +75,9 @@ class YoutubeStreamResolver {
     // same search/manifest work again.
     if (allowExplodeFallback) {
       try {
-        final info = await resolveStreamInfo(track).timeout(
-          const Duration(seconds: 12),
-          onTimeout: () => null,
-        );
+        final info = await resolveStreamInfo(
+          track,
+        ).timeout(const Duration(seconds: 12), onTimeout: () => null);
         if (info != null) {
           final url = info.url.toString();
           return (url: url, userAgent: YoutubeStreamHttp.userAgentForUrl(url));
@@ -185,10 +184,7 @@ class YoutubeStreamResolver {
           videoId.value,
           verifyStream: verifyStream,
         ),
-      ).timeout(
-        timeout,
-        onTimeout: () => null,
-      );
+      ).timeout(timeout, onTimeout: () => null);
       if (res != null) {
         _cache[track.id] = videoId;
         if (saveMatch) await _saveVideoIdFor(track.id, videoId);
@@ -225,13 +221,18 @@ class YoutubeStreamResolver {
     try {
       final directVideoId = _youtubeVideoId(track);
       if (directVideoId != null) {
-        final directInfo = await _streamInfoForVideoId(VideoId(directVideoId), clients);
+        final directInfo = await _streamInfoForVideoId(
+          VideoId(directVideoId),
+          clients,
+        );
         if (directInfo != null) {
           _cache[track.id] = VideoId(directVideoId);
           await _saveVideoIdFor(track.id, VideoId(directVideoId));
           return directInfo;
         }
-        appLogger.w('yt: direct YouTube listing had no playable audio: $directVideoId');
+        appLogger.w(
+          'yt: direct YouTube listing had no playable audio: $directVideoId',
+        );
       }
 
       final cachedVid = _cache[track.id];
@@ -243,7 +244,10 @@ class YoutubeStreamResolver {
 
       final savedVideoId = _cachedVideoIdFor(track.id);
       if (savedVideoId != null) {
-        final savedInfo = await _streamInfoForVideoId(VideoId(savedVideoId), clients);
+        final savedInfo = await _streamInfoForVideoId(
+          VideoId(savedVideoId),
+          clients,
+        );
         if (savedInfo != null) {
           _cache[track.id] = VideoId(savedVideoId);
           return savedInfo;
@@ -398,7 +402,9 @@ class YoutubeStreamResolver {
 
   String? _cachedVideoIdFor(int trackId) {
     if (!Hive.isBoxOpen(HiveBoxes.youtubeMatches)) return null;
-    final value = Hive.box<dynamic>(HiveBoxes.youtubeMatches).get(trackId.toString());
+    final value = Hive.box<dynamic>(
+      HiveBoxes.youtubeMatches,
+    ).get(trackId.toString());
     if (value is String && value.trim().isNotEmpty) {
       return value.trim();
     }
@@ -407,15 +413,16 @@ class YoutubeStreamResolver {
 
   Future<void> _saveVideoIdFor(int trackId, VideoId videoId) async {
     if (!Hive.isBoxOpen(HiveBoxes.youtubeMatches)) return;
-    await Hive.box<dynamic>(HiveBoxes.youtubeMatches).put(
-      trackId.toString(),
-      videoId.value,
-    );
+    await Hive.box<dynamic>(
+      HiveBoxes.youtubeMatches,
+    ).put(trackId.toString(), videoId.value);
   }
 
   Future<void> _removeVideoIdFor(int trackId) async {
     if (!Hive.isBoxOpen(HiveBoxes.youtubeMatches)) return;
-    await Hive.box<dynamic>(HiveBoxes.youtubeMatches).delete(trackId.toString());
+    await Hive.box<dynamic>(
+      HiveBoxes.youtubeMatches,
+    ).delete(trackId.toString());
   }
 
   String _buildQuery(DeezerTrack track) {
@@ -488,10 +495,7 @@ class YoutubeStreamResolver {
   ) async {
     try {
       final manifest = await YoutubeRateLimitGuard.runLowRequest(
-        () => _yt.videos.streamsClient.getManifest(
-          videoId,
-          ytClients: clients,
-        ),
+        () => _yt.videos.streamsClient.getManifest(videoId, ytClients: clients),
       );
       return _pickPlayableAudioOnly(manifest.audioOnly.toList());
     } catch (e) {

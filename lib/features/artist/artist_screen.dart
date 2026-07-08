@@ -72,8 +72,11 @@ class _ArtistScreenState extends ConsumerState<ArtistScreen> {
                 color: Colors.black.withValues(alpha: 0.3),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(PhosphorIconsRegular.caretLeft,
-                  color: Colors.white, size: 20),
+              child: const Icon(
+                PhosphorIconsRegular.caretLeft,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
           ),
           flexibleSpace: FlexibleSpaceBar(
@@ -143,11 +146,7 @@ class _ArtistScreenState extends ConsumerState<ArtistScreen> {
             ),
           ),
         ),
-        _SliverTabContent(
-          artistId: widget.artistId,
-          tab: _tab,
-          artist: artist,
-        ),
+        _SliverTabContent(artistId: widget.artistId, tab: _tab, artist: artist),
         const SliverToBoxAdapter(child: SizedBox(height: 100)),
       ],
     );
@@ -253,9 +252,9 @@ class _DiscographySliverGrid extends ConsumerWidget {
         ),
       ),
       data: (albums) {
-        final sorted = <DeezerAlbum>[...albums]
-          ..sort((a, b) =>
-              (b.releaseDate ?? '').compareTo(a.releaseDate ?? ''));
+        final sorted = <DeezerAlbum>[
+          ...albums,
+        ]..sort((a, b) => (b.releaseDate ?? '').compareTo(a.releaseDate ?? ''));
         return SliverPadding(
           padding: const EdgeInsets.all(16),
           sliver: SliverGrid(
@@ -291,7 +290,9 @@ class _RelatedSliverGrid extends ConsumerWidget {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
           children: List<Widget>.generate(
-              6, (_) => const ShimmerCircle(size: 90)),
+            6,
+            (_) => const ShimmerCircle(size: 90),
+          ),
         ),
       ),
       error: (e, _) => SliverToBoxAdapter(
@@ -342,8 +343,9 @@ class _ActionRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = AppThemeScope.of(context);
-    final following =
-        ref.watch(followedArtistsProvider).any((a) => a.id == artist.id);
+    final following = ref
+        .watch(followedArtistsProvider)
+        .any((a) => a.id == artist.id);
     final topAsync = ref.watch(artistTopTracksProvider(artist.id));
     final popularTracks = topAsync.maybeWhen(
       data: (t) => t.take(10).toList(growable: false),
@@ -393,13 +395,17 @@ class _ActionRow extends ConsumerWidget {
             if (popularCoverage.allOnDevice) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Popular tracks are already on device: ${artist.name}'),
+                  content: Text(
+                    'Popular tracks are already on device: ${artist.name}',
+                  ),
                 ),
               );
               return;
             }
 
-            ref.read(downloadManagerProvider).queueTracks(
+            ref
+                .read(downloadManagerProvider)
+                .queueTracks(
                   popularCoverage.missingTracks,
                   title: popularCoverage.partiallyOnDevice
                       ? 'Missing popular tracks: ${artist.name}'
@@ -422,7 +428,8 @@ class _ActionRow extends ConsumerWidget {
             decoration: BoxDecoration(
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(
-                  theme.cardRadius == 0 ? 0 : 999),
+                theme.cardRadius == 0 ? 0 : 999,
+              ),
               border: Border.all(
                 color: popularCoverage.allOnDevice
                     ? theme.accent
@@ -433,7 +440,9 @@ class _ActionRow extends ConsumerWidget {
               popularCoverage.allOnDevice
                   ? PhosphorIconsFill.cloudCheck
                   : PhosphorIconsRegular.cloudArrowDown,
-              color: popularCoverage.allOnDevice ? theme.accent : theme.onSurface,
+              color: popularCoverage.allOnDevice
+                  ? theme.accent
+                  : theme.onSurface,
               size: 16,
             ),
           ),
@@ -448,7 +457,8 @@ class _ActionRow extends ConsumerWidget {
             decoration: BoxDecoration(
               color: following ? theme.accent : Colors.transparent,
               borderRadius: BorderRadius.circular(
-                  theme.cardRadius == 0 ? 0 : 999),
+                theme.cardRadius == 0 ? 0 : 999,
+              ),
               border: Border.all(
                 color: following
                     ? theme.accent
@@ -490,36 +500,41 @@ class _TabStrip extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
-        children: _labels.entries.map((e) {
-          final isActive = e.key == active;
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => onSelect(e.key),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              margin: const EdgeInsets.only(right: 18),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? theme.accent
-                    : theme.onSurface.withValues(alpha: 0.06),
-                borderRadius:
-                    BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
-              ),
-              child: Text(
-                e.value,
-                style: TextStyle(
-                  color: isActive ? theme.background : theme.onSurface,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.4,
+        children: _labels.entries
+            .map((e) {
+              final isActive = e.key == active;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onSelect(e.key),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  margin: const EdgeInsets.only(right: 18),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? theme.accent
+                        : theme.onSurface.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(
+                      theme.cardRadius == 0 ? 0 : 999,
+                    ),
+                  ),
+                  child: Text(
+                    e.value,
+                    style: TextStyle(
+                      color: isActive ? theme.background : theme.onSurface,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          );
-        }).toList(growable: false),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -553,10 +568,7 @@ class _About extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
               '${artist.nbAlbum ?? 0} albums  ·  ${_formatFans(artist.nbFan)}',
-              style: TextStyle(
-                color: theme.onSurfaceMuted,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: theme.onSurfaceMuted, fontSize: 13),
             ),
           ),
         ],

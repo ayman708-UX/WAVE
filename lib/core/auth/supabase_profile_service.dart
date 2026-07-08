@@ -7,7 +7,9 @@ final supabaseProfileProvider = Provider<SupabaseProfileService>((ref) {
 });
 
 /// Provider that fetches the current user's profile from Supabase.
-final currentProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+final currentProfileProvider = FutureProvider<Map<String, dynamic>?>((
+  ref,
+) async {
   final user = Supabase.instance.client.auth.currentUser;
   if (user == null) return null;
   final svc = ref.read(supabaseProfileProvider);
@@ -93,28 +95,34 @@ class SupabaseProfileService {
   }
 
   /// Fetch saved tracks, albums, and artists (library) for a given user.
-  Future<Map<String, List<Map<String, dynamic>>>> getUserLibrary(String userId) async {
+  Future<Map<String, List<Map<String, dynamic>>>> getUserLibrary(
+    String userId,
+  ) async {
     try {
       final tracksFuture = _client
           .from('saved_tracks')
           .select()
           .eq('user_id', userId)
           .order('created_at', ascending: false);
-      
+
       final albumsFuture = _client
           .from('saved_albums')
           .select()
           .eq('user_id', userId)
           .order('created_at', ascending: false);
-          
+
       final artistsFuture = _client
           .from('saved_artists')
           .select()
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-      final results = await Future.wait([tracksFuture, albumsFuture, artistsFuture]);
-      
+      final results = await Future.wait([
+        tracksFuture,
+        albumsFuture,
+        artistsFuture,
+      ]);
+
       return {
         'tracks': List<Map<String, dynamic>>.from(results[0]),
         'albums': List<Map<String, dynamic>>.from(results[1]),
@@ -125,7 +133,7 @@ class SupabaseProfileService {
       return <String, List<Map<String, dynamic>>>{
         'tracks': <Map<String, dynamic>>[],
         'albums': <Map<String, dynamic>>[],
-        'artists': <Map<String, dynamic>>[]
+        'artists': <Map<String, dynamic>>[],
       };
     }
   }
@@ -147,7 +155,9 @@ class SupabaseProfileService {
 
   /// Fetch community playlists (public playlists from all users) for the
   /// home page "Playlists by WAVE Users" section.
-  Future<List<Map<String, dynamic>>> getCommunityPlaylists({int limit = 20}) async {
+  Future<List<Map<String, dynamic>>> getCommunityPlaylists({
+    int limit = 20,
+  }) async {
     try {
       final currentUserId = _client.auth.currentUser?.id;
       var query = _client
@@ -161,8 +171,10 @@ class SupabaseProfileService {
       }
 
       // Fetch more than needed so we can filter and shuffle
-      final response = await query.order('created_at', ascending: false).limit(50);
-      
+      final response = await query
+          .order('created_at', ascending: false)
+          .limit(50);
+
       final List<Map<String, dynamic>> results = [];
       final Set<String> seenUsers = {};
 
@@ -179,7 +191,7 @@ class SupabaseProfileService {
 
       // Shuffle so they refresh from time to time
       results.shuffle();
-      
+
       return results;
     } catch (e) {
       appLogger.e('Failed to fetch community playlists: $e');
@@ -188,7 +200,10 @@ class SupabaseProfileService {
   }
 
   /// Search community playlists by name
-  Future<List<Map<String, dynamic>>> searchCommunityPlaylists(String searchQuery, {int limit = 20}) async {
+  Future<List<Map<String, dynamic>>> searchCommunityPlaylists(
+    String searchQuery, {
+    int limit = 20,
+  }) async {
     try {
       final currentUserId = _client.auth.currentUser?.id;
       var query = _client
@@ -201,7 +216,9 @@ class SupabaseProfileService {
         query = query.neq('user_id', currentUserId);
       }
 
-      final response = await query.order('created_at', ascending: false).limit(limit);
+      final response = await query
+          .order('created_at', ascending: false)
+          .limit(limit);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       appLogger.e('Failed to search community playlists: $e');

@@ -30,13 +30,19 @@ class LastfmApiClient {
     }
   }
 
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'http://ws.audioscrobbler.com/2.0/',
-    connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 15),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: 'http://ws.audioscrobbler.com/2.0/',
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ),
+  );
 
-  Future<List<Map<String, String>>> getSimilarTracks(String track, String artist, {int limit = 15}) async {
+  Future<List<Map<String, String>>> getSimilarTracks(
+    String track,
+    String artist, {
+    int limit = 15,
+  }) async {
     if (apiKey == null) {
       appLogger.e('Last.fm API key is missing');
       return [];
@@ -54,9 +60,11 @@ class LastfmApiClient {
           'autocorrect': 1,
         },
       );
-      
+
       final data = res.data;
-      if (data != null && data['similartracks'] != null && data['similartracks']['track'] is List) {
+      if (data != null &&
+          data['similartracks'] != null &&
+          data['similartracks']['track'] is List) {
         final tracks = data['similartracks']['track'] as List;
         return tracks.map((t) {
           return {

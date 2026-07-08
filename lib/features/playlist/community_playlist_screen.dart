@@ -38,7 +38,10 @@ class CommunityPlaylistScreen extends ConsumerWidget {
               pinned: true,
               expandedHeight: 320,
               leading: IconButton(
-                icon: Icon(PhosphorIconsRegular.caretLeft, color: theme.onSurface),
+                icon: Icon(
+                  PhosphorIconsRegular.caretLeft,
+                  color: theme.onSurface,
+                ),
                 onPressed: () => context.pop(),
               ),
               flexibleSpace: FlexibleSpaceBar(
@@ -67,7 +70,11 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                                 imageUrl: playlist.pictureMedium!,
                                 fit: BoxFit.cover,
                               )
-                            : Icon(PhosphorIconsRegular.musicNotes, size: 60, color: theme.onSurfaceMuted),
+                            : Icon(
+                                PhosphorIconsRegular.musicNotes,
+                                size: 60,
+                                color: theme.onSurfaceMuted,
+                              ),
                       ),
                     ),
                   ],
@@ -89,16 +96,22 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    if (playlist.description != null && playlist.description!.isNotEmpty) ...[
+                    if (playlist.description != null &&
+                        playlist.description!.isNotEmpty) ...[
                       Text(
                         playlist.description!,
-                        style: TextStyle(color: theme.onSurfaceMuted, fontSize: 14),
+                        style: TextStyle(
+                          color: theme.onSurfaceMuted,
+                          fontSize: 14,
+                        ),
                       ),
                       const SizedBox(height: 12),
                     ],
                     GestureDetector(
                       onTap: () {
-                        context.push(AppRoutes.userProfilePath(communityPlaylist.userId));
+                        context.push(
+                          AppRoutes.userProfilePath(communityPlaylist.userId),
+                        );
                       },
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -112,7 +125,10 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                             ),
                             alignment: Alignment.center,
                             child: Text(
-                              communityPlaylist.creatorName.isNotEmpty ? communityPlaylist.creatorName[0].toUpperCase() : 'U',
+                              communityPlaylist.creatorName.isNotEmpty
+                                  ? communityPlaylist.creatorName[0]
+                                        .toUpperCase()
+                                  : 'U',
                               style: TextStyle(
                                 color: theme.accent,
                                 fontSize: 12,
@@ -135,7 +151,11 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                     const SizedBox(height: 16),
                     Text(
                       '${tracks.length} track${tracks.length == 1 ? '' : 's'}',
-                      style: TextStyle(color: theme.onSurfaceMuted, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: theme.onSurfaceMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -143,11 +163,15 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                         Expanded(
                           child: PlayShufflePair(
                             onPlay: () {
-                              ref.read(playerControlsProvider).playTracks(tracks);
+                              ref
+                                  .read(playerControlsProvider)
+                                  .playTracks(tracks);
                             },
                             onShuffle: () {
                               final shuffled = List.of(tracks)..shuffle();
-                              ref.read(playerControlsProvider).playTracks(shuffled);
+                              ref
+                                  .read(playerControlsProvider)
+                                  .playTracks(shuffled);
                             },
                           ),
                         ),
@@ -155,7 +179,9 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                         // Save button
                         GestureDetector(
                           onTap: () async {
-                            final notifier = ref.read(userPlaylistsProvider.notifier);
+                            final notifier = ref.read(
+                              userPlaylistsProvider.notifier,
+                            );
                             if (isLiked) {
                               // If they liked it, we might want to delete it by local ID, but we need to find it first.
                               // Actually, the user can manage it in their library. Let's just allow importing.
@@ -163,7 +189,9 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                               await notifier.importPlaylist(playlist, tracks);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Saved to your library')),
+                                  SnackBar(
+                                    content: Text('Saved to your library'),
+                                  ),
                                 );
                               }
                             }
@@ -177,8 +205,12 @@ class CommunityPlaylistScreen extends ConsumerWidget {
                             ),
                             alignment: Alignment.center,
                             child: Icon(
-                              isLiked ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.plus,
-                              color: isLiked ? theme.background : theme.onSurface,
+                              isLiked
+                                  ? PhosphorIconsFill.checkCircle
+                                  : PhosphorIconsRegular.plus,
+                              color: isLiked
+                                  ? theme.background
+                                  : theme.onSurface,
                               size: 24,
                             ),
                           ),
@@ -190,20 +222,17 @@ class CommunityPlaylistScreen extends ConsumerWidget {
               ),
             ),
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: DetailTrackRow(
-                      track: tracks[index],
-                      queue: tracks,
-                      indexInQueue: index,
-                      position: index + 1,
-                    ),
-                  );
-                },
-                childCount: tracks.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: DetailTrackRow(
+                    track: tracks[index],
+                    queue: tracks,
+                    indexInQueue: index,
+                    position: index + 1,
+                  ),
+                );
+              }, childCount: tracks.length),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 40)),
           ],

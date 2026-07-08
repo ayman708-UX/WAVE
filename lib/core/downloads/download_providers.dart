@@ -56,5 +56,5 @@ class DownloadedTracksNotifier extends Notifier<List<DeezerTrack>> {
 
 final downloadedTracksProvider =
     NotifierProvider<DownloadedTracksNotifier, List<DeezerTrack>>(
-  DownloadedTracksNotifier.new,
-);
+      DownloadedTracksNotifier.new,
+    );

@@ -29,6 +29,7 @@ import '../../widgets/update_dialog.dart';
 import '../../core/api/lastfm_providers.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/auth/supabase_profile_service.dart';
+
 /// Home tab — 9 sections per spec:
 ///  1. Greeting + settings entry
 ///  2. Quick resume strip (recently played)
@@ -104,10 +105,10 @@ class _Greeting extends StatelessWidget {
     final greeting = hour < 5
         ? 'Late night listen'
         : hour < 12
-            ? 'Good morning'
-            : hour < 18
-                ? 'Good afternoon'
-                : 'Good evening';
+        ? 'Good morning'
+        : hour < 18
+        ? 'Good afternoon'
+        : 'Good evening';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
       child: Row(
@@ -199,9 +200,7 @@ class _QuickResumeSection extends ConsumerWidget {
                   children: <Widget>[
                     ClipRRect(
                       borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(
-                          theme.cardRadius == 0 ? 0 : 8,
-                        ),
+                        topLeft: Radius.circular(theme.cardRadius == 0 ? 0 : 8),
                         bottomLeft: Radius.circular(
                           theme.cardRadius == 0 ? 0 : 8,
                         ),
@@ -213,9 +212,8 @@ class _QuickResumeSection extends ConsumerWidget {
                             ? CachedNetworkImage(
                                 imageUrl: e.imageUrl!,
                                 fit: BoxFit.cover,
-                                placeholder: (_, _) => ColoredBox(
-                                  color: theme.background,
-                                ),
+                                placeholder: (_, _) =>
+                                    ColoredBox(color: theme.background),
                                 errorWidget: (_, _, _) =>
                                     ColoredBox(color: theme.background),
                               )

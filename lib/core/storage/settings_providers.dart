@@ -49,49 +49,48 @@ class AppSettings {
       notifyNewReleases: notifyNewReleases ?? this.notifyNewReleases,
       notifyRecommendations:
           notifyRecommendations ?? this.notifyRecommendations,
-      notifyPlaybackErrors:
-          notifyPlaybackErrors ?? this.notifyPlaybackErrors,
+      notifyPlaybackErrors: notifyPlaybackErrors ?? this.notifyPlaybackErrors,
     );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'audioQuality': audioQuality.name,
-        'crossfadeSeconds': crossfadeSeconds,
-        'equalizerBandsDb': equalizerBandsDb,
-        'downloadOnWifiOnly': downloadOnWifiOnly,
-        'language': language.name,
-        'notifyNewReleases': notifyNewReleases,
-        'notifyRecommendations': notifyRecommendations,
-        'notifyPlaybackErrors': notifyPlaybackErrors,
-      };
+    'audioQuality': audioQuality.name,
+    'crossfadeSeconds': crossfadeSeconds,
+    'equalizerBandsDb': equalizerBandsDb,
+    'downloadOnWifiOnly': downloadOnWifiOnly,
+    'language': language.name,
+    'notifyNewReleases': notifyNewReleases,
+    'notifyRecommendations': notifyRecommendations,
+    'notifyPlaybackErrors': notifyPlaybackErrors,
+  };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     AudioQuality quality(String? n) => AudioQuality.values.firstWhere(
-          (e) => e.name == n,
-          orElse: () => AudioQuality.high,
-        );
+      (e) => e.name == n,
+      orElse: () => AudioQuality.high,
+    );
     AppLanguage lang(String? n) => AppLanguage.values.firstWhere(
-          (e) => e.name == n,
-          orElse: () => AppLanguage.english,
-        );
+      (e) => e.name == n,
+      orElse: () => AppLanguage.english,
+    );
     final bandsRaw = json['equalizerBandsDb'];
     final bands = bandsRaw is List
-        ? bandsRaw.whereType<num>().map((n) => n.toDouble()).toList(
-              growable: false,
-            )
+        ? bandsRaw
+              .whereType<num>()
+              .map((n) => n.toDouble())
+              .toList(growable: false)
         : const <double>[0, 0, 0, 0, 0];
     return AppSettings(
       audioQuality: quality(json['audioQuality'] as String?),
       crossfadeSeconds: (json['crossfadeSeconds'] as num?)?.toInt() ?? 0,
-      equalizerBandsDb:
-          bands.length == 5 ? bands : const <double>[0, 0, 0, 0, 0],
+      equalizerBandsDb: bands.length == 5
+          ? bands
+          : const <double>[0, 0, 0, 0, 0],
       downloadOnWifiOnly: json['downloadOnWifiOnly'] as bool? ?? true,
       language: lang(json['language'] as String?),
       notifyNewReleases: json['notifyNewReleases'] as bool? ?? true,
-      notifyRecommendations:
-          json['notifyRecommendations'] as bool? ?? true,
-      notifyPlaybackErrors:
-          json['notifyPlaybackErrors'] as bool? ?? true,
+      notifyRecommendations: json['notifyRecommendations'] as bool? ?? true,
+      notifyPlaybackErrors: json['notifyPlaybackErrors'] as bool? ?? true,
     );
   }
 }
@@ -114,8 +113,9 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> _persist() async {
-    await Hive.box<dynamic>(HiveBoxes.settings)
-        .put(_kSettingsKey, jsonEncode(state.toJson()));
+    await Hive.box<dynamic>(
+      HiveBoxes.settings,
+    ).put(_kSettingsKey, jsonEncode(state.toJson()));
   }
 
   Future<void> setAudioQuality(AudioQuality q) async {
@@ -167,7 +167,6 @@ class AppSettingsNotifier extends Notifier<AppSettings> {
   }
 }
 
-final appSettingsProvider =
-    NotifierProvider<AppSettingsNotifier, AppSettings>(
+final appSettingsProvider = NotifierProvider<AppSettingsNotifier, AppSettings>(
   AppSettingsNotifier.new,
 );

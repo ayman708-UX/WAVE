@@ -38,11 +38,15 @@ class _SnapHorizontalListState extends State<SnapHorizontalList> {
   Widget build(BuildContext context) {
     final view = HorizontalScrollArrows(
       controller: _scrollController,
-      padding: EdgeInsets.symmetric(horizontal: widget.padding.horizontal / 4), // slightly offset
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.padding.horizontal / 4,
+      ), // slightly offset
       child: ListView.separated(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        physics: _SnapScrollPhysics(itemExtent: widget.itemExtent + widget.spacing),
+        physics: _SnapScrollPhysics(
+          itemExtent: widget.itemExtent + widget.spacing,
+        ),
         padding: widget.padding,
         itemCount: widget.itemCount,
         separatorBuilder: (_, _) => SizedBox(width: widget.spacing),

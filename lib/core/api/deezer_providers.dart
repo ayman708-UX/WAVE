@@ -23,14 +23,16 @@ final chartArtistsProvider = FutureProvider<List<DeezerArtist>>((ref) async {
   return ref.watch(deezerApiClientProvider).getChartArtists(limit: 25);
 });
 
-final chartPlaylistsProvider =
-    FutureProvider<List<DeezerPlaylist>>((ref) async {
+final chartPlaylistsProvider = FutureProvider<List<DeezerPlaylist>>((
+  ref,
+) async {
   return ref.watch(deezerApiClientProvider).getChartPlaylists(limit: 25);
 });
 
 /// Editorial selection (new releases live here).
-final editorialSelectionProvider =
-    FutureProvider<Map<String, dynamic>>((ref) async {
+final editorialSelectionProvider = FutureProvider<Map<String, dynamic>>((
+  ref,
+) async {
   return ref.watch(deezerApiClientProvider).getEditorialSelection();
 });
 
@@ -47,38 +49,49 @@ final genresProvider = FutureProvider<List<DeezerGenre>>((ref) async {
 
 /// Detail endpoints (parameterised) ------------------------------------------
 
-final albumProvider =
-    FutureProvider.family<DeezerAlbum, int>((ref, id) async {
+final albumProvider = FutureProvider.family<DeezerAlbum, int>((ref, id) async {
   return ref.watch(deezerApiClientProvider).getAlbum(id);
 });
 
-final albumTracksProvider =
-    FutureProvider.family<List<DeezerTrack>, int>((ref, id) async {
+final albumTracksProvider = FutureProvider.family<List<DeezerTrack>, int>((
+  ref,
+  id,
+) async {
   return ref.watch(deezerApiClientProvider).getAlbumTracks(id);
 });
 
-final artistProvider =
-    FutureProvider.family<DeezerArtist, int>((ref, id) async {
+final artistProvider = FutureProvider.family<DeezerArtist, int>((
+  ref,
+  id,
+) async {
   return ref.watch(deezerApiClientProvider).getArtist(id);
 });
 
-final artistTopTracksProvider =
-    FutureProvider.family<List<DeezerTrack>, int>((ref, id) async {
+final artistTopTracksProvider = FutureProvider.family<List<DeezerTrack>, int>((
+  ref,
+  id,
+) async {
   return ref.watch(deezerApiClientProvider).getArtistTopTracks(id);
 });
 
-final artistAlbumsProvider =
-    FutureProvider.family<List<DeezerAlbum>, int>((ref, id) async {
+final artistAlbumsProvider = FutureProvider.family<List<DeezerAlbum>, int>((
+  ref,
+  id,
+) async {
   return ref.watch(deezerApiClientProvider).getArtistAlbums(id);
 });
 
-final relatedArtistsProvider =
-    FutureProvider.family<List<DeezerArtist>, int>((ref, id) async {
+final relatedArtistsProvider = FutureProvider.family<List<DeezerArtist>, int>((
+  ref,
+  id,
+) async {
   return ref.watch(deezerApiClientProvider).getRelatedArtists(id);
 });
 
-final playlistProvider =
-    FutureProvider.family<DeezerPlaylist, int>((ref, id) async {
+final playlistProvider = FutureProvider.family<DeezerPlaylist, int>((
+  ref,
+  id,
+) async {
   if (id < 0) {
     try {
       return ref.watch(userPlaylistsProvider).firstWhere((p) => p.id == id);
@@ -89,25 +102,29 @@ final playlistProvider =
   return ref.watch(deezerApiClientProvider).getPlaylist(id);
 });
 
-final playlistTracksProvider =
-    FutureProvider.family<List<DeezerTrack>, int>((ref, id) async {
+final playlistTracksProvider = FutureProvider.family<List<DeezerTrack>, int>((
+  ref,
+  id,
+) async {
   if (id < 0) {
     return ref.watch(localPlaylistTracksProvider)[id] ?? [];
   }
   return ref.watch(deezerApiClientProvider).getPlaylistTracks(id);
 });
 
-final genreRadioTracksProvider =
-    FutureProvider.family<List<DeezerTrack>, int>((ref, id) async {
+final genreRadioTracksProvider = FutureProvider.family<List<DeezerTrack>, int>((
+  ref,
+  id,
+) async {
   return ref.watch(deezerApiClientProvider).getGenreRadioTracks(id);
 });
 
 final madeForYouAlbumsProvider = FutureProvider<List<DeezerAlbum>>((ref) async {
   final api = ref.watch(deezerApiClientProvider);
   final recent = ref.watch(recentlyPlayedProvider);
-  
+
   final artistIds = <int>{};
-  
+
   // Pick up to 5 random recent items to extract artists
   final randomRecent = recent.toList()..shuffle();
   for (final entry in randomRecent.take(5)) {
@@ -161,4 +178,3 @@ final madeForYouAlbumsProvider = FutureProvider<List<DeezerAlbum>>((ref) async {
   albums.shuffle();
   return albums;
 });
-

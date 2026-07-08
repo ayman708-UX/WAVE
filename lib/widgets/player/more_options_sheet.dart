@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/api/models/deezer_track.dart';
 import '../../core/audio/player_providers.dart';
 import '../../core/router/app_router.dart';
+import '../../core/api/deezer_api_client.dart';
 import '../../core/theme/app_theme.dart';
 import 'add_to_playlist_sheet.dart';
 import 'sleep_timer_dial.dart';
@@ -134,33 +135,53 @@ class MoreOptionsSheet extends ConsumerWidget {
                 showAddToPlaylistSheet(context, track);
               },
             ),
-             _Row(
+            _Row(
               icon: PhosphorIconsRegular.vinylRecord,
               label: 'Go to album',
-              onTap: () {
-                final id = track.album?.id;
-                if (id != null) {
-                  Navigator.of(context).pop();
-                  final router = GoRouter.of(context);
-                  if (isFromNowPlaying) {
+              onTap: () async {
+                var id = track.album?.id;
+                if (id == null || id == 0) {
+                  try {
+                    final fullTrack = await ref
+                        .read(deezerApiClientProvider)
+                        .getTrack(track.id);
+                    id = fullTrack.album?.id;
+                  } catch (_) {}
+                }
+                if (id != null && id != 0) {
+                  if (context.mounted) {
                     Navigator.of(context).pop();
+                    final router = GoRouter.of(context);
+                    if (isFromNowPlaying) {
+                      Navigator.of(context).pop();
+                    }
+                    router.push(AppRoutes.albumPath(id));
                   }
-                  router.push(AppRoutes.albumPath(id));
                 }
               },
             ),
             _Row(
               icon: PhosphorIconsRegular.user,
               label: 'Go to artist',
-              onTap: () {
-                final id = track.artist?.id;
-                if (id != null) {
-                  Navigator.of(context).pop();
-                  final router = GoRouter.of(context);
-                  if (isFromNowPlaying) {
+              onTap: () async {
+                var id = track.artist?.id;
+                if (id == null || id == 0) {
+                  try {
+                    final fullTrack = await ref
+                        .read(deezerApiClientProvider)
+                        .getTrack(track.id);
+                    id = fullTrack.artist?.id;
+                  } catch (_) {}
+                }
+                if (id != null && id != 0) {
+                  if (context.mounted) {
                     Navigator.of(context).pop();
+                    final router = GoRouter.of(context);
+                    if (isFromNowPlaying) {
+                      Navigator.of(context).pop();
+                    }
+                    router.push(AppRoutes.artistPath(id));
                   }
-                  router.push(AppRoutes.artistPath(id));
                 }
               },
             ),

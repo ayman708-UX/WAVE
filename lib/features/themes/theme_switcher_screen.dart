@@ -65,19 +65,22 @@ class _ThemeCard extends ConsumerWidget {
       builder: (cardCtx) {
         return GestureDetector(
           onTapDown: (details) {
-            ref.read(themeMorphControllerProvider.notifier).switchTo(
-                  target: theme.id,
-                  origin: details.globalPosition,
-                );
+            ref
+                .read(themeMorphControllerProvider.notifier)
+                .switchTo(target: theme.id, origin: details.globalPosition);
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             width: 220,
             decoration: BoxDecoration(
               color: theme.background,
-              borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 4 : 16),
+              borderRadius: BorderRadius.circular(
+                theme.cardRadius == 0 ? 4 : 16,
+              ),
               border: Border.all(
-                color: active ? theme.accent : theme.onSurface.withValues(alpha: 0.15),
+                color: active
+                    ? theme.accent
+                    : theme.onSurface.withValues(alpha: 0.15),
                 width: active ? 2 : 1,
               ),
               boxShadow: active
@@ -145,7 +148,9 @@ class _ThemeMockup extends StatelessWidget {
           // Mock album art.
           Expanded(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 8),
+              borderRadius: BorderRadius.circular(
+                theme.cardRadius == 0 ? 0 : 8,
+              ),
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(

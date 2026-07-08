@@ -10,21 +10,22 @@ import 'package:ota_update/ota_update.dart';
 
 class UpdateDialog extends StatefulWidget {
   final UpdateInfo updateInfo;
-  
+
   const UpdateDialog({super.key, required this.updateInfo});
-  
+
   @override
   State<UpdateDialog> createState() => _UpdateDialogState();
 }
 
-class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderStateMixin {
+class _UpdateDialogState extends State<UpdateDialog>
+    with SingleTickerProviderStateMixin {
   bool _isDownloading = false;
   double _downloadProgress = 0.0;
-  
+
   @override
   Widget build(BuildContext context) {
     final theme = AppThemeScope.of(context);
-    
+
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -105,7 +106,7 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                 ],
               ),
             ),
-            
+
             // Content
             Padding(
               padding: const EdgeInsets.all(24),
@@ -147,10 +148,7 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                             ),
                           ],
                         ),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          color: theme.accent,
-                        ),
+                        Icon(Icons.arrow_forward_rounded, color: theme.accent),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
@@ -176,9 +174,9 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 20),
-                  
+
                   // Release notes
                   Text(
                     'WHAT\'S NEW',
@@ -211,7 +209,7 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                       ),
                     ),
                   ),
-                  
+
                   if (widget.updateInfo.isMacOS || widget.updateInfo.isIOS) ...[
                     const SizedBox(height: 16),
                     Container(
@@ -246,7 +244,7 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                       ),
                     ),
                   ],
-                  
+
                   if (_isDownloading) ...[
                     const SizedBox(height: 20),
                     Column(
@@ -277,7 +275,9 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                           borderRadius: BorderRadius.circular(8),
                           child: LinearProgressIndicator(
                             value: _downloadProgress,
-                            backgroundColor: theme.onSurface.withValues(alpha: 0.1),
+                            backgroundColor: theme.onSurface.withValues(
+                              alpha: 0.1,
+                            ),
                             valueColor: AlwaysStoppedAnimation<Color>(
                               theme.accent,
                             ),
@@ -290,7 +290,7 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                 ],
               ),
             ),
-            
+
             // Action buttons
             if (!_isDownloading)
               Padding(
@@ -357,7 +357,7 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
       ),
     );
   }
-  
+
   Future<void> _handleUpdate() async {
     if (Platform.isAndroid) {
       await _downloadAndInstallAndroid();
@@ -371,72 +371,77 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
       }
     }
   }
-  
+
   Future<void> _downloadAndInstallAndroid() async {
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0.0;
     });
-    
+
     try {
-      OtaUpdate().execute(
-        widget.updateInfo.downloadUrl,
-        destinationFilename: 'WAVE_${widget.updateInfo.latestVersion}.apk',
-      ).listen(
-        (OtaEvent event) {
-          if (mounted) {
-            setState(() {
-              switch (event.status) {
-                case OtaStatus.DOWNLOADING:
-                  final value = event.value;
-                  if (value != null) {
-                    _downloadProgress = (double.tryParse(value) ?? 0.0) / 100.0;
+      OtaUpdate()
+          .execute(
+            widget.updateInfo.downloadUrl,
+            destinationFilename: 'WAVE_${widget.updateInfo.latestVersion}.apk',
+          )
+          .listen(
+            (OtaEvent event) {
+              if (mounted) {
+                setState(() {
+                  switch (event.status) {
+                    case OtaStatus.DOWNLOADING:
+                      final value = event.value;
+                      if (value != null) {
+                        _downloadProgress =
+                            (double.tryParse(value) ?? 0.0) / 100.0;
+                      }
+                      break;
+                    case OtaStatus.INSTALLING:
+                      _downloadProgress = 1.0;
+                      break;
+                    case OtaStatus.ALREADY_RUNNING_ERROR:
+                    case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
+                    case OtaStatus.INTERNAL_ERROR:
+                    case OtaStatus.DOWNLOAD_ERROR:
+                    case OtaStatus.CHECKSUM_ERROR:
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Update failed: ${event.status}'),
+                        ),
+                      );
+                      Navigator.of(context).pop();
+                      break;
+                    default:
+                      break;
                   }
-                  break;
-                case OtaStatus.INSTALLING:
-                  _downloadProgress = 1.0;
-                  break;
-                case OtaStatus.ALREADY_RUNNING_ERROR:
-                case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-                case OtaStatus.INTERNAL_ERROR:
-                case OtaStatus.DOWNLOAD_ERROR:
-                case OtaStatus.CHECKSUM_ERROR:
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Update failed: ${event.status}')),
-                  );
-                  Navigator.of(context).pop();
-                  break;
-                default:
-                  break;
+                });
               }
-            });
-          }
-        },
-        onError: (error) {
-          if (mounted) {
-            setState(() => _isDownloading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Download failed: $error')),
-            );
-          }
-        },
-      );
+            },
+            onError: (error) {
+              if (mounted) {
+                setState(() => _isDownloading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Download failed: $error')),
+                );
+              }
+            },
+          );
     } catch (e) {
       if (mounted) {
         setState(() => _isDownloading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
       }
     }
   }
-  
+
   Future<void> _downloadAndInstallDesktop() async {
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0.0;
     });
-    
+
     try {
       Directory? downloadsDir;
       try {
@@ -453,22 +458,27 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
       final fileName = 'WAVE-${widget.updateInfo.latestVersion}$extension';
       final filePath = path.join(dir.path, fileName);
       final file = File(filePath);
-      
-      final request = http.Request('GET', Uri.parse(widget.updateInfo.downloadUrl));
+
+      final request = http.Request(
+        'GET',
+        Uri.parse(widget.updateInfo.downloadUrl),
+      );
       final response = await request.send();
-      
+
       final contentLength = response.contentLength ?? 0;
       int downloadedBytes = 0;
       int lastUpdateTime = DateTime.now().millisecondsSinceEpoch;
-      
+
       final sink = file.openWrite();
-      
+
       await for (final chunk in response.stream) {
         sink.add(chunk);
         downloadedBytes += chunk.length;
-        
+
         final now = DateTime.now().millisecondsSinceEpoch;
-        if (contentLength > 0 && mounted && (now - lastUpdateTime > 100 || downloadedBytes == contentLength)) {
+        if (contentLength > 0 &&
+            mounted &&
+            (now - lastUpdateTime > 100 || downloadedBytes == contentLength)) {
           lastUpdateTime = now;
           final progress = downloadedBytes / contentLength;
           setState(() {
@@ -476,12 +486,12 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
           });
         }
       }
-      
+
       await sink.close();
-      
+
       if (mounted) {
         setState(() => _isDownloading = false);
-        
+
         final theme = AppThemeScope.of(context);
         await showDialog(
           context: context,
@@ -491,7 +501,10 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
               children: [
                 const Icon(Icons.check_circle, color: Colors.green, size: 32),
                 const SizedBox(width: 12),
-                Text('Download Complete', style: TextStyle(color: theme.onSurface)),
+                Text(
+                  'Download Complete',
+                  style: TextStyle(color: theme.onSurface),
+                ),
               ],
             ),
             content: Column(
@@ -500,7 +513,9 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
               children: [
                 Text(
                   'Update downloaded to:',
-                  style: TextStyle(color: theme.onSurface.withValues(alpha: 0.7)),
+                  style: TextStyle(
+                    color: theme.onSurface.withValues(alpha: 0.7),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Container(
@@ -523,7 +538,9 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                   Platform.isWindows
                       ? 'Close WAVE and run the installer to update.'
                       : 'Make the file executable and run it:\nchmod +x "$fileName"\n./$fileName',
-                  style: TextStyle(color: theme.onSurface.withValues(alpha: 0.9)),
+                  style: TextStyle(
+                    color: theme.onSurface.withValues(alpha: 0.9),
+                  ),
                 ),
               ],
             ),
@@ -537,19 +554,20 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
                   }
                   if (context.mounted) Navigator.of(context).pop();
                 },
-                child: Text('Open Folder', style: TextStyle(color: theme.onSurface)),
+                child: Text(
+                  'Open Folder',
+                  style: TextStyle(color: theme.onSurface),
+                ),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.accent,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: theme.accent),
                 child: Text('OK', style: TextStyle(color: theme.background)),
               ),
             ],
           ),
         );
-        
+
         if (mounted) {
           Navigator.of(context).pop();
         }
@@ -557,9 +575,9 @@ class _UpdateDialogState extends State<UpdateDialog> with SingleTickerProviderSt
     } catch (e) {
       if (mounted) {
         setState(() => _isDownloading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
       }
     }
   }

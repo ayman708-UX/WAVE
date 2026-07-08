@@ -59,7 +59,10 @@ class SupabaseLibrarySync {
     }
   }
 
-  Future<void> syncArtist(DeezerArtist artist, {required bool isFollowing}) async {
+  Future<void> syncArtist(
+    DeezerArtist artist, {
+    required bool isFollowing,
+  }) async {
     if (!_isSignedIn) return;
     try {
       if (isFollowing) {
@@ -80,7 +83,10 @@ class SupabaseLibrarySync {
     }
   }
 
-  Future<void> syncPlaylist(DeezerPlaylist playlist, {required bool isLiked}) async {
+  Future<void> syncPlaylist(
+    DeezerPlaylist playlist, {
+    required bool isLiked,
+  }) async {
     if (!_isSignedIn) return;
     try {
       if (isLiked) {
@@ -108,46 +114,70 @@ class SupabaseLibrarySync {
     required List<DeezerPlaylist> playlists,
   }) async {
     if (!_isSignedIn) return;
-    
+
     try {
       // Bulk upsert tracks
       if (tracks.isNotEmpty) {
-        final trackRows = tracks.map((t) => {
-          'user_id': _userId,
-          'track_id': t.id.toString(),
-          'track_data': t.toJson(),
-        }).toList();
-        await _client.from('saved_tracks').upsert(trackRows, onConflict: 'user_id,track_id');
+        final trackRows = tracks
+            .map(
+              (t) => {
+                'user_id': _userId,
+                'track_id': t.id.toString(),
+                'track_data': t.toJson(),
+              },
+            )
+            .toList();
+        await _client
+            .from('saved_tracks')
+            .upsert(trackRows, onConflict: 'user_id,track_id');
       }
 
       // Bulk upsert albums
       if (albums.isNotEmpty) {
-        final albumRows = albums.map((a) => {
-          'user_id': _userId,
-          'album_id': a.id.toString(),
-          'album_data': a.toJson(),
-        }).toList();
-        await _client.from('saved_albums').upsert(albumRows, onConflict: 'user_id,album_id');
+        final albumRows = albums
+            .map(
+              (a) => {
+                'user_id': _userId,
+                'album_id': a.id.toString(),
+                'album_data': a.toJson(),
+              },
+            )
+            .toList();
+        await _client
+            .from('saved_albums')
+            .upsert(albumRows, onConflict: 'user_id,album_id');
       }
 
       // Bulk upsert artists
       if (artists.isNotEmpty) {
-        final artistRows = artists.map((a) => {
-          'user_id': _userId,
-          'artist_id': a.id.toString(),
-          'artist_data': a.toJson(),
-        }).toList();
-        await _client.from('saved_artists').upsert(artistRows, onConflict: 'user_id,artist_id');
+        final artistRows = artists
+            .map(
+              (a) => {
+                'user_id': _userId,
+                'artist_id': a.id.toString(),
+                'artist_data': a.toJson(),
+              },
+            )
+            .toList();
+        await _client
+            .from('saved_artists')
+            .upsert(artistRows, onConflict: 'user_id,artist_id');
       }
 
       // Bulk upsert playlists
       if (playlists.isNotEmpty) {
-        final playlistRows = playlists.map((p) => {
-          'user_id': _userId,
-          'playlist_id': p.id.toString(),
-          'playlist_data': p.toJson(),
-        }).toList();
-        await _client.from('saved_playlists').upsert(playlistRows, onConflict: 'user_id,playlist_id');
+        final playlistRows = playlists
+            .map(
+              (p) => {
+                'user_id': _userId,
+                'playlist_id': p.id.toString(),
+                'playlist_data': p.toJson(),
+              },
+            )
+            .toList();
+        await _client
+            .from('saved_playlists')
+            .upsert(playlistRows, onConflict: 'user_id,playlist_id');
       }
     } catch (e) {
       appLogger.e('Failed to bulk sync library: $e');
@@ -161,10 +191,13 @@ class SupabaseLibrarySync {
     required Function(DeezerPlaylist) onPlaylistFound,
   }) async {
     if (!_isSignedIn) return;
-    
+
     try {
       // Tracks
-      final tracksResp = await _client.from('saved_tracks').select().eq('user_id', _userId!);
+      final tracksResp = await _client
+          .from('saved_tracks')
+          .select()
+          .eq('user_id', _userId!);
       for (final row in tracksResp) {
         try {
           final data = row['track_data'] as Map<String, dynamic>;
@@ -176,7 +209,10 @@ class SupabaseLibrarySync {
       }
 
       // Albums
-      final albumsResp = await _client.from('saved_albums').select().eq('user_id', _userId!);
+      final albumsResp = await _client
+          .from('saved_albums')
+          .select()
+          .eq('user_id', _userId!);
       for (final row in albumsResp) {
         try {
           final data = row['album_data'] as Map<String, dynamic>;
@@ -188,7 +224,10 @@ class SupabaseLibrarySync {
       }
 
       // Artists
-      final artistsResp = await _client.from('saved_artists').select().eq('user_id', _userId!);
+      final artistsResp = await _client
+          .from('saved_artists')
+          .select()
+          .eq('user_id', _userId!);
       for (final row in artistsResp) {
         try {
           final data = row['artist_data'] as Map<String, dynamic>;
@@ -200,7 +239,10 @@ class SupabaseLibrarySync {
       }
 
       // Playlists
-      final playlistsResp = await _client.from('saved_playlists').select().eq('user_id', _userId!);
+      final playlistsResp = await _client
+          .from('saved_playlists')
+          .select()
+          .eq('user_id', _userId!);
       for (final row in playlistsResp) {
         try {
           final data = row['playlist_data'] as Map<String, dynamic>;

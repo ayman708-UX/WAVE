@@ -46,10 +46,12 @@ class AppRoutes {
 }
 
 /// Shared keys for nested navigators.
-final GlobalKey<NavigatorState> _rootNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'root');
-final GlobalKey<NavigatorState> _shellNavigatorKey =
-    GlobalKey<NavigatorState>(debugLabel: 'shell');
+final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'root',
+);
+final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>(
+  debugLabel: 'shell',
+);
 
 /// Builds a [CustomTransitionPage] using a fade-through transition. Used as
 /// the default for tab switches.
@@ -99,9 +101,10 @@ CustomTransitionPage<T> _settingsPage<T>({
     child: child,
     transitionDuration: const Duration(milliseconds: 280),
     transitionsBuilder: (context, animation, secondary, child) {
-      final scale = Tween<double>(begin: 1.05, end: 1.0)
-          .chain(CurveTween(curve: Curves.easeOutCubic))
-          .animate(animation);
+      final scale = Tween<double>(
+        begin: 1.05,
+        end: 1.0,
+      ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(animation);
       return FadeTransition(
         opacity: animation,
         child: ScaleTransition(scale: scale, child: child),
@@ -177,7 +180,9 @@ final GoRouter appRouter = GoRouter(
             if (genre == null) {
               return _fadePage(
                 key: state.pageKey,
-                child: const Scaffold(body: Center(child: Text('Invalid genre'))),
+                child: const Scaffold(
+                  body: Center(child: Text('Invalid genre')),
+                ),
               );
             }
             return _fadePage(
@@ -215,7 +220,9 @@ final GoRouter appRouter = GoRouter(
             if (cp == null) {
               return _fadePage(
                 key: state.pageKey,
-                child: const Scaffold(body: Center(child: Text('Invalid playlist'))),
+                child: const Scaffold(
+                  body: Center(child: Text('Invalid playlist')),
+                ),
               );
             }
             return _fadePage(
@@ -244,6 +251,5 @@ final GoRouter appRouter = GoRouter(
       pageBuilder: (context, state) =>
           _sheetPage(key: state.pageKey, child: const AuthScreen()),
     ),
-
   ],
 );

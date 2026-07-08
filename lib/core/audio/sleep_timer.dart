@@ -57,5 +57,5 @@ class SleepTimerNotifier extends Notifier<SleepTimerState?> {
 
 final sleepTimerProvider =
     NotifierProvider<SleepTimerNotifier, SleepTimerState?>(
-  SleepTimerNotifier.new,
-);
+      SleepTimerNotifier.new,
+    );

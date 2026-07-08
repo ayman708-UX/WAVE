@@ -41,25 +41,35 @@ class DeezerApiClient {
 
   static Future<void> checkGeoRestriction() async {
     try {
-      final checkDio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 3),
-        receiveTimeout: const Duration(seconds: 3),
-      ));
-      final res = await checkDio.get<dynamic>('https://api.deezer.com/search?q=believer');
+      final checkDio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 3),
+          receiveTimeout: const Duration(seconds: 3),
+        ),
+      );
+      final res = await checkDio.get<dynamic>(
+        'https://api.deezer.com/search?q=believer',
+      );
       if (res.statusCode == 200 && res.data is Map) {
         final data = res.data as Map;
         if (data['error'] != null) {
-          appLogger.w('Deezer API returned geo-restriction error: ${data['error']}. Activating proxy.');
+          appLogger.w(
+            'Deezer API returned geo-restriction error: ${data['error']}. Activating proxy.',
+          );
           useProxy = true;
         } else if (data['data'] is List && (data['data'] as List).isEmpty) {
-          appLogger.w('Deezer API returned empty results (possible restriction). Activating proxy.');
+          appLogger.w(
+            'Deezer API returned empty results (possible restriction). Activating proxy.',
+          );
           useProxy = true;
         } else {
           appLogger.i('Deezer API health check succeeded. Proxy disabled.');
           useProxy = false;
         }
       } else {
-        appLogger.w('Deezer API health check returned code ${res.statusCode}. Activating proxy.');
+        appLogger.w(
+          'Deezer API health check returned code ${res.statusCode}. Activating proxy.',
+        );
         useProxy = true;
       }
     } catch (e) {
@@ -70,10 +80,10 @@ class DeezerApiClient {
 
   static dynamic _proxyJsonUrls(dynamic json, String proxyUrl) {
     if (json is Map) {
-      return json.map((key, value) => MapEntry(
-            key.toString(),
-            _proxyJsonUrls(value, proxyUrl),
-          ));
+      return json.map(
+        (key, value) =>
+            MapEntry(key.toString(), _proxyJsonUrls(value, proxyUrl)),
+      );
     } else if (json is List) {
       return json.map((item) => _proxyJsonUrls(item, proxyUrl)).toList();
     } else if (json is String) {
@@ -88,7 +98,8 @@ class DeezerApiClient {
   }
 
   DeezerApiClient({Dio? dio})
-    : _dio = dio ??
+    : _dio =
+          dio ??
           Dio(
             BaseOptions(
               baseUrl: 'https://api.deezer.com',
@@ -106,7 +117,9 @@ class DeezerApiClient {
             if (!fullTargetUrl.startsWith(proxyUrl!)) {
               options.path = '$proxyUrl${Uri.encodeComponent(fullTargetUrl)}';
               options.queryParameters = {};
-              appLogger.d('Proxying request: $fullTargetUrl -> ${options.path}');
+              appLogger.d(
+                'Proxying request: $fullTargetUrl -> ${options.path}',
+              );
             }
           }
           handler.next(options);
@@ -120,7 +133,9 @@ class DeezerApiClient {
           handler.next(response);
         },
         onError: (err, handler) {
-          appLogger.w('Deezer error: ${err.requestOptions.uri} -> ${err.message}');
+          appLogger.w(
+            'Deezer error: ${err.requestOptions.uri} -> ${err.message}',
+          );
           handler.next(err);
         },
       ),
@@ -288,7 +303,8 @@ class DeezerApiClient {
     return DeezerAlbum.fromJson(res.data ?? <String, dynamic>{});
   }
 
-  Future<List<DeezerTrack>> getAlbumTracks(int id, {
+  Future<List<DeezerTrack>> getAlbumTracks(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -307,7 +323,8 @@ class DeezerApiClient {
     return DeezerArtist.fromJson(res.data ?? <String, dynamic>{});
   }
 
-  Future<List<DeezerTrack>> getArtistTopTracks(int id, {
+  Future<List<DeezerTrack>> getArtistTopTracks(
+    int id, {
     int limit = 50,
     CancelToken? cancelToken,
   }) async {
@@ -319,7 +336,8 @@ class DeezerApiClient {
     return _mapList(res.data, DeezerTrack.fromJson);
   }
 
-  Future<List<DeezerAlbum>> getArtistAlbums(int id, {
+  Future<List<DeezerAlbum>> getArtistAlbums(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -329,7 +347,8 @@ class DeezerApiClient {
     return _mapList(res.data, DeezerAlbum.fromJson);
   }
 
-  Future<List<DeezerArtist>> getRelatedArtists(int id, {
+  Future<List<DeezerArtist>> getRelatedArtists(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -347,7 +366,8 @@ class DeezerApiClient {
     return DeezerPlaylist.fromJson(res.data ?? <String, dynamic>{});
   }
 
-  Future<List<DeezerTrack>> getPlaylistTracks(int id, {
+  Future<List<DeezerTrack>> getPlaylistTracks(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -370,7 +390,8 @@ class DeezerApiClient {
     return DeezerUser.fromJson(res.data ?? <String, dynamic>{});
   }
 
-  Future<List<DeezerPlaylist>> getUserPlaylists(int id, {
+  Future<List<DeezerPlaylist>> getUserPlaylists(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -380,7 +401,8 @@ class DeezerApiClient {
     return _mapList(res.data, DeezerPlaylist.fromJson);
   }
 
-  Future<List<DeezerTrack>> getUserTracks(int id, {
+  Future<List<DeezerTrack>> getUserTracks(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -390,7 +412,8 @@ class DeezerApiClient {
     return _mapList(res.data, DeezerTrack.fromJson);
   }
 
-  Future<List<DeezerAlbum>> getUserAlbums(int id, {
+  Future<List<DeezerAlbum>> getUserAlbums(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
@@ -400,7 +423,8 @@ class DeezerApiClient {
     return _mapList(res.data, DeezerAlbum.fromJson);
   }
 
-  Future<List<DeezerArtist>> getUserArtists(int id, {
+  Future<List<DeezerArtist>> getUserArtists(
+    int id, {
     CancelToken? cancelToken,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(

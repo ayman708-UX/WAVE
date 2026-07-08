@@ -64,13 +64,13 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               ),
               child: switch (_tab) {
                 0 => const KeyedSubtree(
-                    key: ValueKey<String>('new'),
-                    child: _NewMusicTab(),
-                  ),
+                  key: ValueKey<String>('new'),
+                  child: _NewMusicTab(),
+                ),
                 _ => const KeyedSubtree(
-                    key: ValueKey<String>('charts'),
-                    child: _ChartsTab(),
-                  ),
+                  key: ValueKey<String>('charts'),
+                  child: _ChartsTab(),
+                ),
               },
             ),
           ),
@@ -169,10 +169,8 @@ class _NewMusicTab extends ConsumerWidget {
                   childAspectRatio: 0.74,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, i) => AlbumCard(
-                    album: albums[i + 1],
-                    size: double.infinity,
-                  ),
+                  (context, i) =>
+                      AlbumCard(album: albums[i + 1], size: double.infinity),
                   childCount: albums.length - 1,
                 ),
               ),
@@ -327,7 +325,8 @@ class _ChartsTab extends ConsumerWidget {
         tracks.when(
           data: (list) {
             final top = list.take(50).toList();
-            if (top.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+            if (top.isEmpty)
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
             return SliverToBoxAdapter(
               child: Column(
                 children: <Widget>[
@@ -355,7 +354,8 @@ class _ChartsTab extends ConsumerWidget {
         ),
         albums.when(
           data: (list) {
-            if (list.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+            if (list.isEmpty)
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
             return SliverToBoxAdapter(
               child: Column(
                 children: [
@@ -382,7 +382,8 @@ class _ChartsTab extends ConsumerWidget {
         ),
         lists.when(
           data: (list) {
-            if (list.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+            if (list.isEmpty)
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
             return SliverToBoxAdapter(
               child: Column(
                 children: [

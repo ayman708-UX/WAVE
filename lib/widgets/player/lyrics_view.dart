@@ -100,34 +100,46 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
                               builder: (context) {
                                 _lineKeys[i] ??= GlobalKey();
                                 final line = lyrics.lines[i];
-                                final isActive = lyrics.synced && i == _activeIndex;
+                                final isActive =
+                                    lyrics.synced && i == _activeIndex;
                                 return Container(
                                   key: _lineKeys[i],
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: lyrics.synced
                                         ? () => ref
-                                            .read(playerControlsProvider)
-                                            .seek(line.timestamp)
+                                              .read(playerControlsProvider)
+                                              .seek(line.timestamp)
                                         : null,
                                     child: AnimatedDefaultTextStyle(
-                                      duration: const Duration(milliseconds: 300),
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
                                       curve: Curves.easeOutCubic,
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: isActive
                                             ? theme.onSurface
-                                            : theme.onSurface.withValues(alpha: 0.55),
-                                        fontSize: isActive ? activeFontSize : baseFontSize,
-                                        fontWeight:
-                                            isActive ? FontWeight.w800 : FontWeight.w600,
+                                            : theme.onSurface.withValues(
+                                                alpha: 0.55,
+                                              ),
+                                        fontSize: isActive
+                                            ? activeFontSize
+                                            : baseFontSize,
+                                        fontWeight: isActive
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
                                         height: 1.5,
                                       ),
                                       child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 16,
+                                        ),
                                         child: Center(
                                           child: Text(
-                                            line.text.isEmpty ? '• • •' : line.text,
+                                            line.text.isEmpty
+                                                ? '• • •'
+                                                : line.text,
                                             textAlign: TextAlign.center,
                                           ),
                                         ),
@@ -203,9 +215,10 @@ class _BeatingDot extends StatefulWidget {
 
 class _BeatingDotState extends State<_BeatingDot>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 800))
-        ..repeat(reverse: true);
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  )..repeat(reverse: true);
   @override
   void dispose() {
     _c.dispose();
@@ -219,7 +232,10 @@ class _BeatingDotState extends State<_BeatingDot>
       builder: (context, _) => Transform.scale(
         scale: 0.6 + 0.4 * _c.value,
         child: Container(
-          decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: widget.color,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );

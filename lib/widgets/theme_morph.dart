@@ -93,9 +93,7 @@ class _ThemeMorphOverlayState extends ConsumerState<ThemeMorphOverlay>
         builder: (context, _) {
           final size = MediaQuery.of(context).size;
           final maxR =
-              math.sqrt(
-                size.width * size.width + size.height * size.height,
-              ) +
+              math.sqrt(size.width * size.width + size.height * size.height) +
               80;
           final t = _ctrl.value;
           final phase = t < 0.5 ? t * 2 : (1 - t) * 2;
@@ -104,8 +102,7 @@ class _ThemeMorphOverlayState extends ConsumerState<ThemeMorphOverlay>
           return CustomPaint(
             size: size,
             painter: _CirclePainter(
-              center: morph?.origin ??
-                  Offset(size.width / 2, size.height / 2),
+              center: morph?.origin ?? Offset(size.width / 2, size.height / 2),
               radius: r,
               color: color,
             ),

@@ -23,24 +23,24 @@ class RecentEntry {
   final int atMillis;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'kind': kind,
-        'id': id,
-        'title': title,
-        'subtitle': subtitle,
-        'imageUrl': imageUrl,
-        'atMillis': atMillis,
-      };
+    'kind': kind,
+    'id': id,
+    'title': title,
+    'subtitle': subtitle,
+    'imageUrl': imageUrl,
+    'atMillis': atMillis,
+  };
 
   factory RecentEntry.fromJson(Map<String, dynamic> json) => RecentEntry(
-        kind: (json['kind'] as String?) ?? 'track',
-        id: json['id'] is num
-            ? (json['id'] as num).toInt()
-            : int.tryParse(json['id']?.toString() ?? '') ?? 0,
-        title: (json['title'] as String?) ?? '',
-        subtitle: json['subtitle'] as String?,
-        imageUrl: json['imageUrl'] as String?,
-        atMillis: (json['atMillis'] as num?)?.toInt() ?? 0,
-      );
+    kind: (json['kind'] as String?) ?? 'track',
+    id: json['id'] is num
+        ? (json['id'] as num).toInt()
+        : int.tryParse(json['id']?.toString() ?? '') ?? 0,
+    title: (json['title'] as String?) ?? '',
+    subtitle: json['subtitle'] as String?,
+    imageUrl: json['imageUrl'] as String?,
+    atMillis: (json['atMillis'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// Reads / writes the recently-played list backed by Hive.
@@ -71,7 +71,9 @@ class RecentlyPlayedNotifier extends Notifier<List<RecentEntry>> {
   }
 
   Future<void> remove(RecentEntry entry) async {
-    final next = state.where((e) => !(e.kind == entry.kind && e.id == entry.id)).toList();
+    final next = state
+        .where((e) => !(e.kind == entry.kind && e.id == entry.id))
+        .toList();
     state = next;
     final box = Hive.box<dynamic>(HiveBoxes.recentlyPlayed);
     await box.put(_key, next.map((e) => e.toJson()).toList(growable: false));
@@ -86,5 +88,5 @@ class RecentlyPlayedNotifier extends Notifier<List<RecentEntry>> {
 
 final recentlyPlayedProvider =
     NotifierProvider<RecentlyPlayedNotifier, List<RecentEntry>>(
-  RecentlyPlayedNotifier.new,
-);
+      RecentlyPlayedNotifier.new,
+    );

@@ -21,7 +21,9 @@ final queueStateProvider = StreamProvider<QueueState>((ref) {
 /// Convenience: synchronous snapshot of the player state, falling back to
 /// [PlayerState.initial] when the stream hasn't emitted yet.
 final playerSnapshotProvider = Provider<PlayerState>((ref) {
-  return ref.watch(playerStateProvider).maybeWhen(
+  return ref
+      .watch(playerStateProvider)
+      .maybeWhen(
         data: (s) => s,
         orElse: () => ref.read(musicPlayerServiceProvider).playerState,
       );
@@ -29,7 +31,9 @@ final playerSnapshotProvider = Provider<PlayerState>((ref) {
 
 /// Convenience: synchronous snapshot of the queue state.
 final queueSnapshotProvider = Provider<QueueState>((ref) {
-  return ref.watch(queueStateProvider).maybeWhen(
+  return ref
+      .watch(queueStateProvider)
+      .maybeWhen(
         data: (s) => s,
         orElse: () => ref.read(musicPlayerServiceProvider).queueState,
       );

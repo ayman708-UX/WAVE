@@ -107,8 +107,9 @@ class _Header extends StatelessWidget {
             decoration: BoxDecoration(
               color: theme.surface,
               shape: BoxShape.circle,
-              border:
-                  Border.all(color: theme.onSurface.withValues(alpha: 0.12)),
+              border: Border.all(
+                color: theme.onSurface.withValues(alpha: 0.12),
+              ),
             ),
             alignment: Alignment.center,
             child: Icon(
@@ -188,7 +189,10 @@ class _AccountSection extends ConsumerWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: theme.accent.withValues(alpha: 0.15),
-                  border: Border.all(color: theme.accent.withValues(alpha: 0.4), width: 1.5),
+                  border: Border.all(
+                    color: theme.accent.withValues(alpha: 0.4),
+                    width: 1.5,
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: Icon(
@@ -222,7 +226,10 @@ class _AccountSection extends ConsumerWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: theme.accent,
                   borderRadius: BorderRadius.circular(8),
@@ -305,7 +312,7 @@ class _AccountSection extends ConsumerWidget {
                   await Hive.box<dynamic>(HiveBoxes.likedAlbums).clear();
                   await Hive.box<dynamic>(HiveBoxes.followedArtists).clear();
                   await Hive.box<dynamic>(HiveBoxes.likedPlaylists).clear();
-                  
+
                   ref.invalidate(currentProfileProvider);
                   ref.invalidate(userPlaylistsProvider);
                   ref.invalidate(localPlaylistTracksProvider);
@@ -410,10 +417,9 @@ class _ThemePreviewCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTapDown: (details) {
-        ref.read(themeMorphControllerProvider.notifier).switchTo(
-              target: theme.id,
-              origin: details.globalPosition,
-            );
+        ref
+            .read(themeMorphControllerProvider.notifier)
+            .switchTo(target: theme.id, origin: details.globalPosition);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
@@ -445,12 +451,12 @@ class _ThemePreviewCard extends ConsumerWidget {
             children: <Widget>[
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: theme.accent,
-                  borderRadius:
-                      BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
+                  borderRadius: BorderRadius.circular(
+                    theme.cardRadius == 0 ? 0 : 999,
+                  ),
                 ),
                 child: Text(
                   theme.name.toUpperCase(),
@@ -478,9 +484,9 @@ class _ThemeMockPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final r = theme.cardRadius == 0 ? 0.0 : 6.0;
     RRect rrect(Offset o, double w, double h) => RRect.fromRectAndRadius(
-          Rect.fromLTWH(o.dx, o.dy, w, h),
-          Radius.circular(r),
-        );
+      Rect.fromLTWH(o.dx, o.dy, w, h),
+      Radius.circular(r),
+    );
     // Top bar.
     canvas.drawRRect(
       rrect(const Offset(0, 0), size.width, 16),
@@ -526,8 +532,6 @@ class _ThemeMockPainter extends CustomPainter {
       oldDelegate.theme != theme;
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Crossfade ----------------------------------------------------------------
 
@@ -569,9 +573,7 @@ class _CrossfadeRow extends ConsumerWidget {
             value: value / 12,
             onChanged: (v) {
               final secs = (v * 12).round();
-              ref
-                  .read(appSettingsProvider.notifier)
-                  .setCrossfadeSeconds(secs);
+              ref.read(appSettingsProvider.notifier).setCrossfadeSeconds(secs);
               ref.read(playerControlsProvider).setCrossfadeSeconds(secs);
             },
           ),
@@ -596,8 +598,10 @@ class _CustomLinearSlider extends StatelessWidget {
         const thumbS = 18.0;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart: (d) => onChanged((d.localPosition.dx / w).clamp(0.0, 1.0)),
-          onHorizontalDragUpdate: (d) => onChanged((d.localPosition.dx / w).clamp(0.0, 1.0)),
+          onHorizontalDragStart: (d) =>
+              onChanged((d.localPosition.dx / w).clamp(0.0, 1.0)),
+          onHorizontalDragUpdate: (d) =>
+              onChanged((d.localPosition.dx / w).clamp(0.0, 1.0)),
           onTapDown: (d) => onChanged((d.localPosition.dx / w).clamp(0.0, 1.0)),
           child: SizedBox(
             height: thumbS + 4,
@@ -643,8 +647,6 @@ class _CustomLinearSlider extends StatelessWidget {
   }
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Equalizer ----------------------------------------------------------------
 
@@ -682,20 +684,15 @@ class _EqualizerCard extends ConsumerWidget {
             children: <Widget>[
               Text(
                 '−12 dB  ·  +12 dB',
-                style: TextStyle(
-                  color: theme.onSurfaceMuted,
-                  fontSize: 11,
-                ),
+                style: TextStyle(color: theme.onSurfaceMuted, fontSize: 11),
               ),
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () async {
-                  await ref
-                      .read(appSettingsProvider.notifier)
-                      .resetEqualizer();
-                  await ref
-                      .read(playerControlsProvider)
-                      .setEqualizer(const <double>[0, 0, 0, 0, 0]);
+                  await ref.read(appSettingsProvider.notifier).resetEqualizer();
+                  await ref.read(playerControlsProvider).setEqualizer(
+                    const <double>[0, 0, 0, 0, 0],
+                  );
                 },
                 child: Text(
                   'RESET TO DEFAULT',
@@ -789,10 +786,7 @@ class _EqBand extends ConsumerWidget {
                             decoration: BoxDecoration(
                               color: theme.background,
                               borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                color: theme.accent,
-                                width: 2,
-                              ),
+                              border: Border.all(color: theme.accent, width: 2),
                             ),
                           ),
                         ),
@@ -827,8 +821,6 @@ class _EqBand extends ConsumerWidget {
     );
   }
 }
-
-
 
 // ---------------------------------------------------------------------------
 // About --------------------------------------------------------------------
@@ -891,8 +883,9 @@ class _AboutBlockState extends State<_AboutBlock> {
                 height: 44,
                 decoration: BoxDecoration(
                   color: theme.accent,
-                  borderRadius:
-                      BorderRadius.circular(theme.cardRadius == 0 ? 0 : 12),
+                  borderRadius: BorderRadius.circular(
+                    theme.cardRadius == 0 ? 0 : 12,
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -920,7 +913,7 @@ class _AboutBlockState extends State<_AboutBlock> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'v1.0.5  ·  Build 6',
+                      'v1.0.6  ·  Build 7',
                       style: TextStyle(
                         color: theme.onSurfaceMuted,
                         fontSize: 12,
@@ -935,13 +928,17 @@ class _AboutBlockState extends State<_AboutBlock> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isCheckingForUpdates ? null : () => _checkForUpdates(context),
+              onPressed: _isCheckingForUpdates
+                  ? null
+                  : () => _checkForUpdates(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.accent.withValues(alpha: 0.1),
                 foregroundColor: theme.accent,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 4 : 8),
+                  borderRadius: BorderRadius.circular(
+                    theme.cardRadius == 0 ? 4 : 8,
+                  ),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),

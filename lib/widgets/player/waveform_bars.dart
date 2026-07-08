@@ -119,7 +119,12 @@ class _WavePainter extends CustomPainter {
 
 /// Tiny 3-bar equalizer icon shown in the mini-player when playing.
 class MiniEqualizerIcon extends StatefulWidget {
-  const MiniEqualizerIcon({super.key, required this.isPlaying, this.color, this.size = 14});
+  const MiniEqualizerIcon({
+    super.key,
+    required this.isPlaying,
+    this.color,
+    this.size = 14,
+  });
   final bool isPlaying;
   final Color? color;
   final double size;
@@ -130,8 +135,10 @@ class MiniEqualizerIcon extends StatefulWidget {
 
 class _MiniEqualizerIconState extends State<MiniEqualizerIcon>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
 
   @override
   void initState() {

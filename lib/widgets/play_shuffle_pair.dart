@@ -28,7 +28,9 @@ class PlayShufflePair extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: theme.accent,
-                borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
+                borderRadius: BorderRadius.circular(
+                  theme.cardRadius == 0 ? 0 : 999,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -62,7 +64,9 @@ class PlayShufflePair extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(theme.cardRadius == 0 ? 0 : 999),
+              borderRadius: BorderRadius.circular(
+                theme.cardRadius == 0 ? 0 : 999,
+              ),
               border: Border.all(color: theme.onSurface.withValues(alpha: 0.2)),
             ),
             child: Icon(

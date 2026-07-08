@@ -67,10 +67,7 @@ class StubMusicPlayerService implements MusicPlayerService {
   @override
   Future<void> stop() async {
     _emitPlayer(
-      _player.copyWith(
-        status: PlaybackStatus.idle,
-        position: Duration.zero,
-      ),
+      _player.copyWith(status: PlaybackStatus.idle, position: Duration.zero),
     );
   }
 
@@ -106,7 +103,8 @@ class StubMusicPlayerService implements MusicPlayerService {
 
   @override
   Future<void> skipToIndex(int indexInUpcoming) async {
-    if (indexInUpcoming < 0 || indexInUpcoming >= _queue.upcoming.length) return;
+    if (indexInUpcoming < 0 || indexInUpcoming >= _queue.upcoming.length)
+      return;
     final next = _queue.upcoming[indexInUpcoming];
     final newUpcoming = _queue.upcoming.sublist(indexInUpcoming + 1);
     final skippedTracks = _queue.upcoming.sublist(0, indexInUpcoming);
@@ -122,12 +120,7 @@ class StubMusicPlayerService implements MusicPlayerService {
         upcoming: newUpcoming,
       ),
     );
-    _emitPlayer(
-      _player.copyWith(
-        currentTrack: next,
-        position: Duration.zero,
-      ),
-    );
+    _emitPlayer(_player.copyWith(currentTrack: next, position: Duration.zero));
   }
 
   @override
@@ -148,12 +141,7 @@ class StubMusicPlayerService implements MusicPlayerService {
         upcoming: newUpcoming,
       ),
     );
-    _emitPlayer(
-      _player.copyWith(
-        currentTrack: prev,
-        position: Duration.zero,
-      ),
-    );
+    _emitPlayer(_player.copyWith(currentTrack: prev, position: Duration.zero));
   }
 
   @override
@@ -206,10 +194,7 @@ class StubMusicPlayerService implements MusicPlayerService {
   }
 
   @override
-  Future<void> playTracks(
-    List<DeezerTrack> tracks, {
-    int? startIndex,
-  }) async {
+  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex}) async {
     if (tracks.isEmpty) return;
     int index = 0;
     if (startIndex != null) {
@@ -298,17 +283,21 @@ class StubMusicPlayerService implements MusicPlayerService {
   Future<void> toggleRelatedMode() async {
     // Stub implementation
     if (_queue.isRelatedMode) {
-      _emitQueue(_queue.copyWith(
-        isRelatedMode: false,
-        upcoming: _queue.originalUpcoming,
-        originalUpcoming: const <DeezerTrack>[],
-      ));
+      _emitQueue(
+        _queue.copyWith(
+          isRelatedMode: false,
+          upcoming: _queue.originalUpcoming,
+          originalUpcoming: const <DeezerTrack>[],
+        ),
+      );
     } else {
-      _emitQueue(_queue.copyWith(
-        isRelatedMode: true,
-        originalUpcoming: _queue.upcoming,
-        upcoming: const <DeezerTrack>[],
-      ));
+      _emitQueue(
+        _queue.copyWith(
+          isRelatedMode: true,
+          originalUpcoming: _queue.upcoming,
+          upcoming: const <DeezerTrack>[],
+        ),
+      );
     }
   }
 }

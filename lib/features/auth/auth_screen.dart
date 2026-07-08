@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/storage/hive_boxes.dart';
+
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
@@ -73,7 +74,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       }
       if (mounted) {
         // Helper to convert objects to safe Hive JSON
-        Map<String, dynamic> deepJson(Map<String, dynamic> json) => 
+        Map<String, dynamic> deepJson(Map<String, dynamic> json) =>
             jsonDecode(jsonEncode(json)) as Map<String, dynamic>;
 
         // 1. Download existing remote library to local (Merge)
@@ -81,64 +82,83 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         final albumsBox = Hive.box<dynamic>(HiveBoxes.likedAlbums);
         final artistsBox = Hive.box<dynamic>(HiveBoxes.followedArtists);
 
-        await ref.read(supabaseLibrarySyncProvider).downloadLibrary(
-          onTrackFound: (track) async {
-            if (!tracksBox.containsKey(track.id)) {
-              await tracksBox.put(track.id, deepJson(track.toJson()));
-            }
-          },
-          onAlbumFound: (album) async {
-            if (!albumsBox.containsKey(album.id)) {
-              await albumsBox.put(album.id, deepJson(album.toJson()));
-            }
-          },
-          onArtistFound: (artist) async {
-            if (!artistsBox.containsKey(artist.id)) {
-              await artistsBox.put(artist.id, deepJson(artist.toJson()));
-            }
-          },
-          onPlaylistFound: (playlist) async {
-            final likedPlaylistsBox = Hive.box<dynamic>(HiveBoxes.likedPlaylists);
-            if (!likedPlaylistsBox.containsKey(playlist.id.toString())) {
-              await likedPlaylistsBox.put(playlist.id.toString(), deepJson(playlist.toJson()));
-            }
-          },
-        );
+        await ref
+            .read(supabaseLibrarySyncProvider)
+            .downloadLibrary(
+              onTrackFound: (track) async {
+                if (!tracksBox.containsKey(track.id)) {
+                  await tracksBox.put(track.id, deepJson(track.toJson()));
+                }
+              },
+              onAlbumFound: (album) async {
+                if (!albumsBox.containsKey(album.id)) {
+                  await albumsBox.put(album.id, deepJson(album.toJson()));
+                }
+              },
+              onArtistFound: (artist) async {
+                if (!artistsBox.containsKey(artist.id)) {
+                  await artistsBox.put(artist.id, deepJson(artist.toJson()));
+                }
+              },
+              onPlaylistFound: (playlist) async {
+                final likedPlaylistsBox = Hive.box<dynamic>(
+                  HiveBoxes.likedPlaylists,
+                );
+                if (!likedPlaylistsBox.containsKey(playlist.id.toString())) {
+                  await likedPlaylistsBox.put(
+                    playlist.id.toString(),
+                    deepJson(playlist.toJson()),
+                  );
+                }
+              },
+            );
 
         // 2. Download existing remote playlists to local (Merge)
         final playlistsBox = Hive.box<dynamic>(HiveBoxes.playlists);
         final playlistTracksBox = Hive.box<dynamic>(HiveBoxes.playlistTracks);
 
-        await ref.read(supabasePlaylistSyncProvider).downloadPlaylists(
-          onPlaylistFound: (playlist, tracks) async {
-            final existingTitles = playlistsBox.values.whereType<Map>().map((m) => m['title']?.toString() ?? '').toSet();
-            if (!existingTitles.contains(playlist.title)) {
-              await playlistsBox.put(playlist.id.toString(), deepJson(playlist.toJson()));
-              await playlistTracksBox.put(playlist.id.toString(), tracks.map((t) => deepJson(t.toJson())).toList());
-            }
-          },
-        );
+        await ref
+            .read(supabasePlaylistSyncProvider)
+            .downloadPlaylists(
+              onPlaylistFound: (playlist, tracks) async {
+                final existingTitles = playlistsBox.values
+                    .whereType<Map>()
+                    .map((m) => m['title']?.toString() ?? '')
+                    .toSet();
+                if (!existingTitles.contains(playlist.title)) {
+                  await playlistsBox.put(
+                    playlist.id.toString(),
+                    deepJson(playlist.toJson()),
+                  );
+                  await playlistTracksBox.put(
+                    playlist.id.toString(),
+                    tracks.map((t) => deepJson(t.toJson())).toList(),
+                  );
+                }
+              },
+            );
 
         // 3. Sync local playlists upward (Bulk Upsert)
         final playlists = ref.read(userPlaylistsProvider);
         final trackMap = ref.read(localPlaylistTracksProvider);
-        await ref.read(supabasePlaylistSyncProvider).syncAllPlaylists(
-          playlists: playlists,
-          trackMap: trackMap,
-        );
+        await ref
+            .read(supabasePlaylistSyncProvider)
+            .syncAllPlaylists(playlists: playlists, trackMap: trackMap);
 
         // 4. Sync local library upward (Bulk Upsert)
         final likedTracks = ref.read(likedTracksProvider);
         final likedAlbums = ref.read(likedAlbumsProvider);
         final following = ref.read(followedArtistsProvider);
         final likedPlaylists = ref.read(likedPlaylistsProvider);
-        await ref.read(supabaseLibrarySyncProvider).syncAll(
-          tracks: likedTracks,
-          albums: likedAlbums,
-          artists: following,
-          playlists: likedPlaylists,
-        );
-        
+        await ref
+            .read(supabaseLibrarySyncProvider)
+            .syncAll(
+              tracks: likedTracks,
+              albums: likedAlbums,
+              artists: following,
+              playlists: likedPlaylists,
+            );
+
         // Invalidate to reload UI with merged data, wait a bit to avoid build phase conflicts
         await Future.delayed(const Duration(milliseconds: 100));
         if (!mounted) return;
@@ -156,21 +176,34 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       if (mounted) {
         final raw = e.toString().toLowerCase();
         String message;
-        if (raw.contains('email_not_confirmed') || raw.contains('email not confirmed')) {
-          message = 'Please confirm your email before signing in. Check your inbox.';
-        } else if (raw.contains('invalid_credentials') || raw.contains('invalid login')) {
+        if (raw.contains('email_not_confirmed') ||
+            raw.contains('email not confirmed')) {
+          message =
+              'Please confirm your email before signing in. Check your inbox.';
+        } else if (raw.contains('invalid_credentials') ||
+            raw.contains('invalid login')) {
           message = 'Incorrect email or password. Try again.';
-        } else if (raw.contains('user_already_exists') || raw.contains('already registered')) {
+        } else if (raw.contains('user_already_exists') ||
+            raw.contains('already registered')) {
           message = 'An account with this email already exists.';
         } else if (raw.contains('username_taken')) {
           message = 'This username is already taken. Please choose another.';
         } else if (raw.contains('weak_password') || raw.contains('password')) {
           message = 'Password is too weak. Use at least 6 characters.';
-        } else if (raw.contains('invalid_email') || raw.contains('valid email')) {
+        } else if (raw.contains('invalid_email') ||
+            raw.contains('valid email')) {
           message = 'Please enter a valid email address.';
         } else {
           // Fallback: strip the ugly exception wrapper
-          message = e.toString().replaceAll(RegExp(r'AuthApiException\(message: |AuthException\(message: |, statusCode: \d+.*?\)'), '').trim();
+          message = e
+              .toString()
+              .replaceAll(
+                RegExp(
+                  r'AuthApiException\(message: |AuthException\(message: |, statusCode: \d+.*?\)',
+                ),
+                '',
+              )
+              .trim();
           if (message.isEmpty) message = 'Something went wrong. Try again.';
         }
         _showError(message);
@@ -198,7 +231,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     context.go(AppRoutes.home);
   }
 
-  InputDecoration _inputDecoration(AppTheme theme, String label, IconData icon) {
+  InputDecoration _inputDecoration(
+    AppTheme theme,
+    String label,
+    IconData icon,
+  ) {
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: theme.onSurfaceMuted),
@@ -232,11 +269,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Logo / brand area
-                Icon(
-                  PhosphorIconsFill.waveform,
-                  size: 56,
-                  color: theme.accent,
-                ),
+                Icon(PhosphorIconsFill.waveform, size: 56, color: theme.accent),
                 const SizedBox(height: 16),
                 Text(
                   'WAVE',
@@ -250,11 +283,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _isLogin ? 'Sign in to sync your library' : 'Join the WAVE community',
-                  style: TextStyle(
-                    color: theme.onSurfaceMuted,
-                    fontSize: 14,
-                  ),
+                  _isLogin
+                      ? 'Sign in to sync your library'
+                      : 'Join the WAVE community',
+                  style: TextStyle(color: theme.onSurfaceMuted, fontSize: 14),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 36),
@@ -264,14 +296,22 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   TextField(
                     controller: _displayNameController,
                     style: TextStyle(color: theme.onSurface),
-                    decoration: _inputDecoration(theme, 'Display Name', PhosphorIconsRegular.user),
+                    decoration: _inputDecoration(
+                      theme,
+                      'Display Name',
+                      PhosphorIconsRegular.user,
+                    ),
                     textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: _usernameController,
                     style: TextStyle(color: theme.onSurface),
-                    decoration: _inputDecoration(theme, 'Username', PhosphorIconsRegular.at),
+                    decoration: _inputDecoration(
+                      theme,
+                      'Username',
+                      PhosphorIconsRegular.at,
+                    ),
                     textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 14),
@@ -282,7 +322,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   style: TextStyle(color: theme.onSurface),
-                  decoration: _inputDecoration(theme, 'Email', PhosphorIconsRegular.envelope),
+                  decoration: _inputDecoration(
+                    theme,
+                    'Email',
+                    PhosphorIconsRegular.envelope,
+                  ),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 14),
@@ -292,16 +336,25 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   style: TextStyle(color: theme.onSurface),
-                  decoration: _inputDecoration(theme, 'Password', PhosphorIconsRegular.lock).copyWith(
-                    suffixIcon: GestureDetector(
-                      onTap: () => setState(() => _obscurePassword = !_obscurePassword),
-                      child: Icon(
-                        _obscurePassword ? PhosphorIconsRegular.eye : PhosphorIconsRegular.eyeSlash,
-                        color: theme.onSurfaceMuted,
-                        size: 20,
+                  decoration:
+                      _inputDecoration(
+                        theme,
+                        'Password',
+                        PhosphorIconsRegular.lock,
+                      ).copyWith(
+                        suffixIcon: GestureDetector(
+                          onTap: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                          child: Icon(
+                            _obscurePassword
+                                ? PhosphorIconsRegular.eye
+                                : PhosphorIconsRegular.eyeSlash,
+                            color: theme.onSurfaceMuted,
+                            size: 20,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
                 ),
@@ -315,7 +368,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.accent,
                       foregroundColor: theme.background,
-                      disabledBackgroundColor: theme.accent.withValues(alpha: 0.4),
+                      disabledBackgroundColor: theme.accent.withValues(
+                        alpha: 0.4,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -348,10 +403,15 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   },
                   child: RichText(
                     text: TextSpan(
-                      style: TextStyle(color: theme.onSurfaceMuted, fontSize: 14),
+                      style: TextStyle(
+                        color: theme.onSurfaceMuted,
+                        fontSize: 14,
+                      ),
                       children: [
                         TextSpan(
-                          text: _isLogin ? "Don't have an account? " : 'Already have an account? ',
+                          text: _isLogin
+                              ? "Don't have an account? "
+                              : 'Already have an account? ',
                         ),
                         TextSpan(
                           text: _isLogin ? 'Sign Up' : 'Sign In',
@@ -370,7 +430,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 // Divider
                 Row(
                   children: [
-                    Expanded(child: Divider(color: theme.onSurfaceMuted.withValues(alpha: 0.2))),
+                    Expanded(
+                      child: Divider(
+                        color: theme.onSurfaceMuted.withValues(alpha: 0.2),
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
@@ -382,7 +446,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         ),
                       ),
                     ),
-                    Expanded(child: Divider(color: theme.onSurfaceMuted.withValues(alpha: 0.2))),
+                    Expanded(
+                      child: Divider(
+                        color: theme.onSurfaceMuted.withValues(alpha: 0.2),
+                      ),
+                    ),
                   ],
                 ),
 
@@ -393,7 +461,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   height: 52,
                   child: OutlinedButton.icon(
                     onPressed: _continueAsGuest,
-                    icon: Icon(PhosphorIconsRegular.userCircle, size: 20, color: theme.onSurfaceMuted),
+                    icon: Icon(
+                      PhosphorIconsRegular.userCircle,
+                      size: 20,
+                      color: theme.onSurfaceMuted,
+                    ),
                     label: Text(
                       'Continue as Guest',
                       style: TextStyle(
@@ -403,7 +475,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                     ),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: theme.onSurfaceMuted.withValues(alpha: 0.3)),
+                      side: BorderSide(
+                        color: theme.onSurfaceMuted.withValues(alpha: 0.3),
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),

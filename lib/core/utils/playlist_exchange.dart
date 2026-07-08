@@ -28,10 +28,13 @@ class PlaylistExchange {
     return const JsonEncoder.withIndent('  ').convert(map);
   }
 
-  static Future<File> exportToFile(DeezerPlaylist playlist, List<DeezerTrack> tracks) async {
+  static Future<File> exportToFile(
+    DeezerPlaylist playlist,
+    List<DeezerTrack> tracks,
+  ) async {
     final jsonStr = serialize(playlist, tracks);
     final dir = await getExchangeDirectory();
-    
+
     // Clean filename
     final safeTitle = playlist.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
     final file = File('${dir.path}/wave_playlist_$safeTitle.json');
@@ -39,7 +42,10 @@ class PlaylistExchange {
     return file;
   }
 
-  static Future<void> exportToClipboard(DeezerPlaylist playlist, List<DeezerTrack> tracks) async {
+  static Future<void> exportToClipboard(
+    DeezerPlaylist playlist,
+    List<DeezerTrack> tracks,
+  ) async {
     final jsonStr = serialize(playlist, tracks);
     await Clipboard.setData(ClipboardData(text: jsonStr));
   }
@@ -56,7 +62,7 @@ class PlaylistExchange {
     final title = map['title'] as String? ?? 'Imported Playlist';
     final description = map['description'] as String?;
     final rawTracks = map['tracks'] as List?;
-    
+
     final tracks = <DeezerTrack>[];
     if (rawTracks != null) {
       for (final t in rawTracks) {
@@ -65,18 +71,18 @@ class PlaylistExchange {
         }
       }
     }
-    
+
     // Create local playlist
     final pl = await userPlsNotifier.create(
       title: title,
       description: description,
     );
-    
+
     // Add tracks to it
     for (final t in tracks) {
       await tracksNotifier.addTrack(pl.id, t);
     }
-    
+
     return pl;
   }
 }
