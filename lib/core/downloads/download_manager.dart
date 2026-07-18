@@ -905,7 +905,14 @@ class DownloadManager {
       range: 'bytes=0-',
     );
 
-    final head = await _safeHead(url, headers);
+    _DownloadHead head;
+    if (YoutubeStreamHttp.isYoutubeCdnUrl(url)) {
+      head = await _safeHead(url, headers);
+    } else {
+      // It's a Convertytmp3 fallback link. Avoid HEAD to prevent consuming one-time tokens.
+      head = const _DownloadHead(contentType: 'audio/mp3', contentLength: 0);
+    }
+
     final contentType = head.contentType;
     final totalBytes = head.contentLength;
     final ext = _extensionFor(url: url, contentType: contentType);
