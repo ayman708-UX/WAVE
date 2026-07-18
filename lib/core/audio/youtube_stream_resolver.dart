@@ -7,6 +7,7 @@ import '../../services/youtube_audio_extractor.dart';
 import '../api/models/deezer_track.dart';
 import '../storage/hive_boxes.dart';
 import '../utils/app_logger.dart';
+import '../api/convertytmp3_client.dart';
 import '../utils/youtube_stream_http.dart';
 import 'youtube_rate_limit_guard.dart';
 
@@ -85,6 +86,39 @@ class YoutubeStreamResolver {
       } catch (e) {
         if (YoutubeRateLimitGuard.isRateLimitError(e)) _handleRateLimit(e);
         appLogger.w('youtube_explode_dart fallback failed: $e');
+      }
+    }
+
+    // Convertytmp3 Fallback
+    VideoId? vidId = _cache[track.id];
+    if (vidId == null) {
+      final savedId = _cachedVideoIdFor(track.id);
+      if (savedId != null) vidId = VideoId(savedId);
+    }
+    
+    if (vidId == null) {
+      try {
+        final results = await YoutubeRateLimitGuard.runLowRequest(
+          () => _yt.search.search(_buildQuery(track)),
+        );
+        if (results.isNotEmpty) {
+           vidId = results.first.id;
+        }
+      } catch (_) {}
+    }
+
+    if (vidId != null) {
+      try {
+        final streamUrl = await Convertytmp3Client.getStreamUrl(vidId.value);
+        if (streamUrl != null) {
+          appLogger.i('Resolved via Convertytmp3Client for ${track.title}');
+          return (
+            url: streamUrl,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+          );
+        }
+      } catch (e) {
+        appLogger.w('Convertytmp3 fallback failed: $e');
       }
     }
 

@@ -551,7 +551,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       }
 
       await fadingInPlayer
-          .open(mk.Media(url), play: true)
+          .open(mk.Media(url, httpHeaders: userAgent != null ? {'User-Agent': userAgent} : null), play: true)
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
@@ -703,7 +703,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       }
 
       await player
-          .open(mk.Media(url), play: true)
+          .open(mk.Media(url, httpHeaders: userAgent != null ? {'User-Agent': userAgent} : null), play: true)
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),

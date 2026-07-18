@@ -431,29 +431,26 @@ class _WaveUsersSectionState extends ConsumerState<_WaveUsersSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionHeader(title: 'WAVE Users'),
-        SizedBox(
+        SnapHorizontalList(
+          itemCount: _users.length,
+          itemExtent: 180,
           height: 90,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _users.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, i) {
-              final user = _users[i];
-              return _WaveUserCard(
-                displayName: user['display_name'] ?? 'User',
-                username: user['username'] ?? '',
-                isPublic: user['is_public'] == true,
-                theme: theme,
-                onTap: () {
-                  final userId = user['id'] as String?;
-                  if (userId != null) {
-                    context.push(AppRoutes.userProfilePath(userId));
-                  }
-                },
-              );
-            },
-          ),
+          spacing: 10,
+          itemBuilder: (context, i) {
+            final user = _users[i];
+            return _WaveUserCard(
+              displayName: user['display_name'] ?? 'User',
+              username: user['username'] ?? '',
+              isPublic: user['is_public'] == true,
+              theme: theme,
+              onTap: () {
+                final userId = user['id'] as String?;
+                if (userId != null) {
+                  context.push(AppRoutes.userProfilePath(userId));
+                }
+              },
+            );
+          },
         ),
       ],
     );
@@ -580,17 +577,12 @@ class _CommunityPlaylistsSearchSection extends ConsumerWidget {
         return Column(
           children: [
             const SectionHeader(title: 'Community Playlists'),
-            SizedBox(
+            SnapHorizontalList(
+              itemCount: playlists.length,
+              itemExtent: 150,
               height: 198,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: playlists.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, i) {
-                  return CommunityPlaylistCard(communityPlaylist: playlists[i]);
-                },
-              ),
+              spacing: 12,
+              itemBuilder: (context, i) => CommunityPlaylistCard(communityPlaylist: playlists[i]),
             ),
           ],
         );

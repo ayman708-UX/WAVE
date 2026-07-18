@@ -712,20 +712,13 @@ class _CommunityPlaylistsSection extends ConsumerWidget {
         if (playlists.isEmpty) return const SizedBox.shrink();
 
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SectionHeader(title: 'Playlists by WAVE users'),
-            SizedBox(
+            SnapHorizontalList(
+              itemCount: playlists.length,
+              itemExtent: 150,
               height: 198,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: playlists.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, i) {
-                  return CommunityPlaylistCard(communityPlaylist: playlists[i]);
-                },
-              ),
+              itemBuilder: (context, i) => CommunityPlaylistCard(communityPlaylist: playlists[i]),
             ),
           ],
         );

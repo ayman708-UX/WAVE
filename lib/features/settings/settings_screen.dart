@@ -913,7 +913,7 @@ class _AboutBlockState extends State<_AboutBlock> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'v1.0.6  ·  Build 7',
+                      'v1.0.7  ·  Build 8',
                       style: TextStyle(
                         color: theme.onSurfaceMuted,
                         fontSize: 12,
