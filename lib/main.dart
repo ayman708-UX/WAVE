@@ -17,6 +17,9 @@ import 'core/api/deezer_api_client.dart';
 import 'core/api/lastfm_api_client.dart';
 import 'core/api/supabase_client.dart';
 import 'core/audio/local_proxy.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/auth/sync_manager.dart';
+import 'core/auth/supabase_auth_service.dart';
 import 'widgets/theme_morph.dart';
 
 late final MediaKitMusicPlayerService _playerService;
@@ -80,11 +83,33 @@ Future<void> main() async {
   );
 }
 
-class WaveApp extends ConsumerWidget {
+
+class WaveApp extends ConsumerStatefulWidget {
   const WaveApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WaveApp> createState() => _WaveAppState();
+}
+
+class _WaveAppState extends ConsumerState<WaveApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(isSignedInProvider)) {
+        ref.read(syncManagerProvider).performFullSync();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<AuthState>>(authStateProvider, (previous, next) {
+      if (next.value?.session != null) {
+        ref.read(syncManagerProvider).performFullSync();
+      }
+    });
+
     final theme = ref.watch(themeProvider);
     return AppThemeScope(
       theme: theme,

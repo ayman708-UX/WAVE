@@ -42,19 +42,21 @@ class LikedTracksNotifier extends Notifier<List<DeezerTrack>> {
 
   Future<void> toggle(DeezerTrack track) async {
     final box = Hive.box<dynamic>(HiveBoxes.likedTracks);
+    final key = track.id < 0 ? track.id.toString() : track.id;
     if (isLiked(track.id)) {
-      await box.delete(track.id);
+      await box.delete(key);
       state = state.where((t) => t.id != track.id).toList(growable: false);
       ref.read(supabaseLibrarySyncProvider).syncTrack(track, isLiked: false);
     } else {
-      await box.put(track.id, _deepJson(track.toJson()));
+      await box.put(key, _deepJson(track.toJson()));
       state = <DeezerTrack>[track, ...state];
       ref.read(supabaseLibrarySyncProvider).syncTrack(track, isLiked: true);
     }
   }
 
   Future<void> remove(int id) async {
-    await Hive.box<dynamic>(HiveBoxes.likedTracks).delete(id);
+    final key = id < 0 ? id.toString() : id;
+    await Hive.box<dynamic>(HiveBoxes.likedTracks).delete(key);
     final track = state.firstWhere((t) => t.id == id);
     state = state.where((t) => t.id != id).toList(growable: false);
     ref.read(supabaseLibrarySyncProvider).syncTrack(track, isLiked: false);

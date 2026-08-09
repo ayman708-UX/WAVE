@@ -17,6 +17,9 @@ class HiveBoxes {
   /// Locally liked playlists.
   static const String likedPlaylists = 'liked_playlists';
 
+  /// Locally liked audiobooks.
+  static const String likedAudiobooks = 'liked_audiobooks';
+
   /// Followed artist ids.
   static const String followedArtists = 'followed_artists';
 
@@ -44,6 +47,9 @@ class HiveBoxes {
   /// Cached Deezer track id -> YouTube video id matches.
   /// This reduces repeat YouTube searching on each device.
   static const String youtubeMatches = 'youtube_matches';
+  
+  /// Audiobook playback progress (book uuid -> json).
+  static const String audiobookProgress = 'audiobook_progress';
 
   static Future<void> openAll() async {
     await Hive.initFlutter();
@@ -62,6 +68,8 @@ class HiveBoxes {
       Hive.openBox<dynamic>(bannedArtists),
       Hive.openBox<dynamic>(downloads),
       Hive.openBox<dynamic>(youtubeMatches),
+      Hive.openBox<dynamic>(likedAudiobooks),
+      Hive.openBox<dynamic>(audiobookProgress),
     ]);
   }
 }

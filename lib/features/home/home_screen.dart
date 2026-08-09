@@ -27,8 +27,8 @@ import '../../widgets/shimmer.dart';
 import '../../widgets/snap_horizontal_list.dart';
 import '../../widgets/update_dialog.dart';
 import '../../core/api/lastfm_providers.dart';
-import '../../core/api/models/deezer_track.dart';
-import '../../core/auth/supabase_profile_service.dart';
+import '../audiobooks/services/audiobook_providers.dart';
+import '../../core/models/audiobook.dart';
 
 /// Home tab — 9 sections per spec:
 ///  1. Greeting + settings entry
@@ -80,6 +80,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         physics: const BouncingScrollPhysics(),
         slivers: <Widget>[
           SliverToBoxAdapter(child: _Greeting()),
+          const SliverToBoxAdapter(child: _ContinueListeningSection()),
           const SliverToBoxAdapter(child: _QuickResumeSection()),
           const SliverToBoxAdapter(child: _TrendingSection()),
           const SliverToBoxAdapter(child: _MadeForYouSection()),
@@ -88,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SliverToBoxAdapter(child: _MixesSection()),
           const SliverToBoxAdapter(child: _EditorialPicksSection()),
           const SliverToBoxAdapter(child: _RecentlyPlayedSection()),
+          const SliverToBoxAdapter(child: _AudiobooksSection()),
           const SliverToBoxAdapter(child: _RecommendedTracksSection()),
           const SliverToBoxAdapter(child: _CommunityPlaylistsSection()),
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -315,6 +317,28 @@ class _MadeForYouSection extends ConsumerWidget {
 
 // ---------------------------------------------------------------------------
 
+class _ContinueListeningSection extends ConsumerWidget {
+  const _ContinueListeningSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progresses = ref.watch(audiobookProgressProvider);
+    if (progresses.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: <Widget>[
+        const SectionHeader(title: 'Continue listening'),
+        _CoverRow<AudiobookProgress>(
+          items: progresses,
+          builder: (p) => AudiobookCard(audiobook: p.audiobook, autoPlay: true),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+
 class _NewReleasesSection extends ConsumerWidget {
   const _NewReleasesSection();
 
@@ -523,6 +547,38 @@ class _RecentlyPlayedSection extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+class _AudiobooksSection extends ConsumerWidget {
+  const _AudiobooksSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(popularAudiobooksProvider);
+    return async.when(
+      data: (books) {
+        if (books.isEmpty) return const SizedBox.shrink();
+        return Column(
+          children: <Widget>[
+            const SectionHeader(title: 'Audiobooks'),
+            _CoverRow<dynamic>(
+              items: books,
+              builder: (b) => AudiobookCard(audiobook: b),
+            ),
+          ],
+        );
+      },
+      loading: () => Column(
+        children: const <Widget>[
+          SectionHeader(title: 'Audiobooks'),
+          _CoverRowShimmer(),
+        ],
+      ),
+      error: (e, _) => const SizedBox.shrink(),
     );
   }
 }

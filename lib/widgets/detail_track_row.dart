@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import 'package:file_picker/file_picker.dart';
+
 import '../core/api/models/deezer_track.dart';
 import '../core/audio/player_providers.dart';
 import '../core/downloads/download_manager.dart';
@@ -191,6 +193,32 @@ class DetailTrackRow extends ConsumerWidget {
           label: 'Add to queue',
           onTap: () => ref.read(playerControlsProvider).addToQueueLast(track),
         ),
+        if (downloaded)
+          ContextMenuItem(
+            icon: PhosphorIconsRegular.export,
+            label: 'Export track...',
+            onTap: () async {
+              final selectedDir = await FilePicker.platform.getDirectoryPath(
+                dialogTitle: 'Select folder to export "${track.title}"',
+              );
+              if (selectedDir != null && selectedDir.trim().isNotEmpty) {
+                final ok = await ref
+                    .read(downloadManagerProvider)
+                    .exportSingleTrack(track, destinationDirPath: selectedDir);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ok
+                            ? 'Exported "${track.title}" → $selectedDir'
+                            : 'Failed to export "${track.title}"',
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+          ),
         ContextMenuItem(
           icon: downloaded
               ? PhosphorIconsFill.cloudCheck

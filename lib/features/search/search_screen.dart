@@ -22,6 +22,7 @@ import '../../widgets/search_bar.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/shimmer.dart';
 import '../../widgets/snap_horizontal_list.dart';
+import '../audiobooks/services/audiobook_providers.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -198,6 +199,12 @@ class _ResultsState extends ConsumerState<_Results> {
             // Community Playlists section (from Supabase)
             SliverToBoxAdapter(
               child: _CommunityPlaylistsSearchSection(
+                query: ref.watch(searchQueryProvider),
+              ),
+            ),
+            // Audiobooks section
+            SliverToBoxAdapter(
+              child: _AudiobooksSearchSection(
                 query: ref.watch(searchQueryProvider),
               ),
             ),
@@ -588,6 +595,49 @@ class _CommunityPlaylistsSearchSection extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Audiobooks Search Section -----------------------------------------------
+
+class _AudiobooksSearchSection extends ConsumerWidget {
+  const _AudiobooksSearchSection({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (query.trim().isEmpty) return const SizedBox.shrink();
+
+    final asyncBooks = ref.watch(searchAudiobooksProvider(query));
+
+    return asyncBooks.when(
+      data: (books) {
+        if (books.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          children: [
+            const SectionHeader(title: 'Audiobooks'),
+            SnapHorizontalList(
+              itemCount: books.length,
+              itemExtent: 150,
+              height: 198,
+              spacing: 12,
+              itemBuilder: (context, i) => AudiobookCard(audiobook: books[i]),
+            ),
+          ],
+        );
+      },
+      loading: () => const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title: 'Audiobooks'),
+          SizedBox(height: 198),
+        ],
+      ),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

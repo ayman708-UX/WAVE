@@ -13,6 +13,8 @@ import '../api/models/deezer_track.dart';
 import '../audio/youtube_stream_resolver.dart';
 import '../audio/youtube_rate_limit_guard.dart';
 import '../storage/hive_boxes.dart';
+import '../storage/settings_providers.dart';
+import '../api/octave_music_service.dart';
 import '../utils/app_logger.dart';
 import '../utils/youtube_stream_http.dart';
 import 'local_download_matcher.dart';
@@ -346,26 +348,47 @@ class DownloadManager {
     return path;
   }
 
-  Future<DownloadExportResult> exportDownloadsBackup({
-    String? parentDirectory,
-  }) async {
-    final privatePath = await _getAppDir();
-    final exportPath = await _defaultExportDir(
-      parentDirectory: parentDirectory,
-    );
+  /// Sanitize filename for operating system compatibility
+  String _sanitizeFileName(String name) {
+    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+  }
 
+  /// Export all downloaded tracks to a user-selected destination directory.
+  Future<DownloadExportResult> exportDownloadsToDirectory(
+    String targetDirectoryPath,
+  ) async {
+    final privatePath = await _getAppDir();
     final sourceDir = Directory(privatePath);
     if (!await sourceDir.exists()) {
       throw Exception('WAVE private download folder was not found.');
     }
 
-    final destDir = Directory(exportPath);
+    final destDir = Directory(targetDirectoryPath);
     if (!await destDir.exists()) {
       await destDir.create(recursive: true);
     }
 
     var filesCopied = 0;
     var bytesCopied = 0;
+
+    final downloadsBox = Hive.isBoxOpen(HiveBoxes.downloads)
+        ? Hive.box<dynamic>(HiveBoxes.downloads)
+        : null;
+
+    final metadataMap = <String, DeezerTrack>{};
+    if (downloadsBox != null) {
+      for (final key in downloadsBox.keys) {
+        final val = downloadsBox.get(key);
+        if (val is Map) {
+          try {
+            final t = DeezerTrack.fromJson(
+              jsonDecode(jsonEncode(val)) as Map<String, dynamic>,
+            );
+            metadataMap[key.toString()] = t;
+          } catch (_) {}
+        }
+      }
+    }
 
     await for (final entity in sourceDir.list(recursive: false)) {
       if (entity is! File) continue;
@@ -378,8 +401,6 @@ class DownloadManager {
         continue;
       }
 
-      // Export backup is for songs only. Do not copy downloaded cover artwork
-      // or any extra metadata files into the user's public backup folder.
       if (lowerName.contains('_cover') ||
           ext == '.jpg' ||
           ext == '.jpeg' ||
@@ -390,7 +411,21 @@ class DownloadManager {
         continue;
       }
 
-      final target = File(p.join(destDir.path, name));
+      final trackIdStr = p.basenameWithoutExtension(name);
+      final trackMeta = metadataMap[trackIdStr];
+      String exportFileName = name;
+
+      if (trackMeta != null) {
+        final artist = trackMeta.artist?.name ?? '';
+        final title = trackMeta.title;
+        if (artist.isNotEmpty && title.isNotEmpty) {
+          exportFileName = _sanitizeFileName('$artist - $title$ext');
+        } else if (title.isNotEmpty) {
+          exportFileName = _sanitizeFileName('$title$ext');
+        }
+      }
+
+      final target = File(p.join(destDir.path, exportFileName));
       await target.parent.create(recursive: true);
       await entity.copy(target.path);
 
@@ -399,17 +434,54 @@ class DownloadManager {
     }
 
     appLogger.i(
-      'Exported WAVE song backup to $exportPath '
-      '($filesCopied audio files, $bytesCopied bytes)',
+      'Exported WAVE songs to $targetDirectoryPath ($filesCopied audio files, $bytesCopied bytes)',
     );
 
     return DownloadExportResult(
       privatePath: privatePath,
-      exportPath: exportPath,
+      exportPath: targetDirectoryPath,
       filesCopied: filesCopied,
       bytesCopied: bytesCopied,
       metadataItems: 0,
     );
+  }
+
+  Future<DownloadExportResult> exportDownloadsBackup({
+    String? parentDirectory,
+  }) async {
+    final exportPath = await _defaultExportDir(
+      parentDirectory: parentDirectory,
+    );
+    return exportDownloadsToDirectory(exportPath);
+  }
+
+  /// Export a single downloaded track to a destination directory
+  Future<bool> exportSingleTrack(
+    DeezerTrack track, {
+    required String destinationDirPath,
+  }) async {
+    final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
+    if (localPath == null) return false;
+
+    final sourceFile = File(localPath);
+    if (!await sourceFile.exists()) return false;
+
+    final ext = p.extension(localPath);
+    final artist = track.artist?.name ?? '';
+    final title = track.title;
+    final cleanName = artist.isNotEmpty
+        ? _sanitizeFileName('$artist - $title$ext')
+        : _sanitizeFileName('$title$ext');
+
+    final destDir = Directory(destinationDirPath);
+    if (!await destDir.exists()) {
+      await destDir.create(recursive: true);
+    }
+
+    final targetFile = File(p.join(destDir.path, cleanName));
+    await sourceFile.copy(targetFile.path);
+    appLogger.i('Exported track ${track.title} to ${targetFile.path}');
+    return true;
   }
 
   Future<void> openExportedDownloadsFolder({String? parentDirectory}) async {
@@ -751,23 +823,65 @@ class DownloadManager {
 
     await _deletePartialFiles(baseDir, trackId);
 
-    // v23Q:
-    // Download resolving must be quick. Use the same fast playable URL path
-    // first, then use the slower streamInfo manifest fallback only if the fast
-    // path fails. Do not sit through two long attempts per song.
-    final res = await _cancelable(
-      _resolver
-          .resolveUrl(track)
-          .timeout(const Duration(seconds: 16), onTimeout: () => null),
-    );
+    String? url;
+    String? userAgent;
+    Map<String, String>? customHeaders;
 
-    if (res != null) {
+    if (track.link == 'wave://audiobook' && track.preview != null) {
+      try {
+        final payload = jsonDecode(track.preview!);
+        final rawUrl = payload['url'] as String;
+        final isTorrent = payload['isTorrent'] == true;
+        if (isTorrent) {
+          throw Exception('Downloading torrent audiobooks is not supported yet.');
+        } else {
+          url = rawUrl;
+        }
+        final headersMap = payload['httpHeaders'];
+        if (headersMap is Map) {
+          customHeaders = Map<String, String>.from(headersMap);
+        }
+      } catch (e) {
+        appLogger.e('Failed to parse audiobook track payload for download: $e');
+      }
+    } else {
+      final settingsRaw = Hive.isBoxOpen(HiveBoxes.settings)
+          ? Hive.box<dynamic>(HiveBoxes.settings).get('app_settings')
+          : null;
+      AppSettings settings = const AppSettings();
+      if (settingsRaw is String && settingsRaw.isNotEmpty) {
+        try {
+          settings = AppSettings.fromJson(jsonDecode(settingsRaw));
+        } catch (_) {}
+      }
+
+      if (settings.audioQuality == AudioQuality.lossless) {
+        final octaveRes = await OctaveMusicService.instance.resolveLosslessUrl(track);
+        if (octaveRes != null) {
+          url = octaveRes.url;
+          customHeaders = octaveRes.headers;
+        }
+      }
+
+      if (url == null) {
+        final res = await _cancelable(
+          _resolver
+              .resolveUrl(track)
+              .timeout(const Duration(seconds: 16), onTimeout: () => null),
+        );
+        url = res?.url;
+        userAgent = res?.userAgent;
+      }
+    }
+
+    if (url != null) {
       try {
         _throwIfCancelled();
         await _downloadFromDirectUrl(
           track: track,
-          url: res.url,
-          userAgent: res.userAgent,
+          url: url,
+          userAgent: userAgent,
+          customHeaders: customHeaders,
           itemIndex: itemIndex,
           baseDir: baseDir,
         );
@@ -887,6 +1001,7 @@ class DownloadManager {
     required DeezerTrack track,
     required String url,
     required String? userAgent,
+    Map<String, String>? customHeaders,
     required int itemIndex,
     required String baseDir,
   }) async {
@@ -904,6 +1019,9 @@ class DownloadManager {
       userAgent: userAgent,
       range: 'bytes=0-',
     );
+    if (customHeaders != null) {
+      headers.addAll(customHeaders);
+    }
 
     _DownloadHead head;
     if (YoutubeStreamHttp.isYoutubeCdnUrl(url)) {
@@ -925,6 +1043,7 @@ class DownloadManager {
           track: track,
           url: url,
           userAgent: userAgent,
+          customHeaders: customHeaders,
           itemIndex: itemIndex,
           partFile: partFile,
           totalBytes: totalBytes,
@@ -941,6 +1060,7 @@ class DownloadManager {
           track: track,
           url: url,
           userAgent: userAgent,
+          customHeaders: customHeaders,
           itemIndex: itemIndex,
           partFile: partFile,
           expectedTotalBytes: totalBytes > 0 ? totalBytes : null,
@@ -952,6 +1072,7 @@ class DownloadManager {
         track: track,
         url: url,
         userAgent: userAgent,
+        customHeaders: customHeaders,
         itemIndex: itemIndex,
         partFile: partFile,
         expectedTotalBytes: totalBytes > 0 ? totalBytes : null,
@@ -972,6 +1093,7 @@ class DownloadManager {
     required DeezerTrack track,
     required String url,
     required String? userAgent,
+    Map<String, String>? customHeaders,
     required int itemIndex,
     required File partFile,
     required int totalBytes,
@@ -1007,6 +1129,9 @@ class DownloadManager {
           userAgent: userAgent,
           range: 'bytes=${range.$1}-${range.$2}',
         );
+        if (customHeaders != null) {
+          headers.addAll(customHeaders);
+        }
 
         tasks.add(
           _dio.download(
@@ -1125,6 +1250,7 @@ class DownloadManager {
     required DeezerTrack track,
     required String url,
     required String? userAgent,
+    Map<String, String>? customHeaders,
     required int itemIndex,
     required File partFile,
     required int? expectedTotalBytes,
@@ -1139,6 +1265,9 @@ class DownloadManager {
       userAgent: userAgent,
       range: useRangeHeader ? 'bytes=0-' : null,
     );
+    if (customHeaders != null) {
+      headers.addAll(customHeaders);
+    }
 
     _activeCancelToken = CancelToken();
 
@@ -1266,6 +1395,12 @@ class DownloadManager {
   String _extensionFor({required String url, String? contentType}) {
     final type = (contentType ?? '').toLowerCase();
 
+    if (type.contains('audio/flac') ||
+        type.contains('audio/x-flac') ||
+        type.contains('flac') ||
+        url.contains('/audio/lossless')) {
+      return '.flac';
+    }
     if (type.contains('audio/mp4') ||
         type.contains('video/mp4') ||
         type.contains('audio/x-m4a') ||
@@ -1286,6 +1421,7 @@ class DownloadManager {
     }
 
     final uriExt = p.extension(Uri.tryParse(url)?.path ?? '').toLowerCase();
+    if (uriExt == '.flac') return '.flac';
     if (uriExt == '.m4a' || uriExt == '.mp4') return '.m4a';
     if (uriExt == '.webm') return '.webm';
     if (uriExt == '.ogg' || uriExt == '.oga') return '.ogg';
@@ -1300,6 +1436,7 @@ class DownloadManager {
 
   Future<File> _targetAudioFile(String baseDir, int trackId, String ext) async {
     for (final oldExt in const <String>[
+      '.flac',
       '.webm',
       '.m4a',
       '.mp3',

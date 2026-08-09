@@ -14,6 +14,7 @@ import '../core/downloads/download_status.dart';
 import '../core/router/app_router.dart';
 import '../core/storage/recently_played.dart';
 import '../core/theme/app_theme.dart';
+import '../core/models/audiobook.dart';
 import 'on_device_badge.dart';
 
 /// Album-cover sized card with title + subtitle, used by Made-for-you,
@@ -424,6 +425,38 @@ class TrackCard extends ConsumerWidget {
                 ),
               );
         }
+      },
+    );
+  }
+}
+
+/// Audiobook card derived helper — pushes the audiobook route on tap.
+class AudiobookCard extends ConsumerWidget {
+  const AudiobookCard({
+    super.key,
+    required this.audiobook,
+    this.size = 150,
+    this.autoPlay = false,
+  });
+
+  final dynamic audiobook;
+  final double size;
+  final bool autoPlay;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return CoverCard(
+      imageUrl: audiobook.coverImage.isNotEmpty ? audiobook.coverImage : null,
+      title: audiobook.title,
+      subtitle: audiobook.source,
+      size: size,
+      onTap: () {
+        context.push(
+          AppRoutes.audiobook,
+          extra: autoPlay
+              ? {'audiobook': audiobook, 'autoPlay': true}
+              : audiobook,
+        );
       },
     );
   }

@@ -17,6 +17,8 @@ import '../../features/settings/settings_screen.dart';
 import '../../features/auth/auth_screen.dart';
 import '../../features/profile/user_profile_screen.dart';
 import '../../features/playlist/shared_playlist_screen.dart';
+import '../../features/audiobooks/audiobook_screen.dart';
+import '../../core/models/audiobook.dart';
 import '../../widgets/app_shell.dart';
 
 /// Route name constants — never hardcode paths at call sites.
@@ -37,6 +39,7 @@ class AppRoutes {
   static const String auth = '/auth';
   static const String userProfile = '/user/:id';
   static const String sharedPlaylist = '/shared-playlist/:id';
+  static const String audiobook = '/audiobook';
 
   static String artistPath(int id) => '/artist/$id';
   static String albumPath(int id) => '/album/$id';
@@ -228,6 +231,32 @@ final GoRouter appRouter = GoRouter(
             return _fadePage(
               key: state.pageKey,
               child: CommunityPlaylistScreen(communityPlaylist: cp),
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.audiobook,
+          pageBuilder: (context, state) {
+            Audiobook? book;
+            bool autoPlay = false;
+            if (state.extra is Audiobook) {
+              book = state.extra as Audiobook;
+            } else if (state.extra is Map<String, dynamic>) {
+              final map = state.extra as Map<String, dynamic>;
+              book = map['audiobook'] as Audiobook?;
+              autoPlay = map['autoPlay'] == true;
+            }
+            if (book == null) {
+              return _fadePage(
+                key: state.pageKey,
+                child: const Scaffold(
+                  body: Center(child: Text('Invalid audiobook')),
+                ),
+              );
+            }
+            return _fadePage(
+              key: state.pageKey,
+              child: AudiobookScreen(audiobook: book, autoPlay: autoPlay),
             );
           },
         ),

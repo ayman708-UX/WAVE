@@ -194,7 +194,7 @@ class StubMusicPlayerService implements MusicPlayerService {
   }
 
   @override
-  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex}) async {
+  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex, Duration? startPosition}) async {
     if (tracks.isEmpty) return;
     int index = 0;
     if (startIndex != null) {

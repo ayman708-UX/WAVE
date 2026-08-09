@@ -6,17 +6,22 @@ import 'package:audio_service/audio_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
+import '../../features/audiobooks/services/torrent_stream_service.dart';
 import '../api/deezer_api_client.dart';
 import '../api/lastfm_api_client.dart';
 import '../api/models/deezer_track.dart';
 import '../api/models/player_state.dart';
 import '../api/models/queue_state.dart';
+import '../auth/supabase_audiobook_sync.dart';
 import '../storage/hive_boxes.dart';
+import '../models/audiobook.dart';
 import '../downloads/local_download_matcher.dart';
 import '../utils/app_logger.dart';
 import '../utils/youtube_stream_http.dart';
 import 'local_proxy.dart';
 import 'music_player_service.dart';
+import '../api/octave_music_service.dart';
+import '../storage/settings_providers.dart';
 import 'youtube_stream_resolver.dart';
 import 'youtube_rate_limit_guard.dart';
 
@@ -57,6 +62,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   bool _audioResetting = false;
   int? _lastAutoRecoveryTrackId;
   List<double> _equalizerBandsDb = const <double>[0, 0, 0, 0, 0];
+  int _lastAudiobookSaveTime = 0;
 
   int _nextPlaybackOp() => ++_playbackOp;
 
@@ -388,6 +394,32 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     if (pos == _state.position) return;
     _emitPlayer(_state.copyWith(position: pos));
 
+    final currentTrack = _queue.current;
+    if (currentTrack != null && currentTrack.link == 'wave://audiobook') {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastAudiobookSaveTime > 5000 && currentTrack.preview != null) {
+        _lastAudiobookSaveTime = now;
+        try {
+          final payload = jsonDecode(currentTrack.preview!);
+          final book = Audiobook.fromJson(payload['audiobook']);
+          final chapterIndex = payload['chapterIndex'] as int;
+          
+          final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
+          final progress = AudiobookProgress(
+            audiobook: book,
+            chapterIndex: chapterIndex,
+            positionSeconds: pos.inSeconds,
+            updatedAt: now,
+          );
+          box.put(
+            book.uuid,
+            jsonDecode(jsonEncode(progress.toJson())),
+          );
+          SupabaseAudiobookSync().syncProgress(progress);
+        } catch (_) {}
+      }
+    }
+
     // Check for automatic crossfade
     if (!_isCrossfading &&
         !_autoCrossfadeTriggered &&
@@ -443,7 +475,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   // Source loading & Crossfade -----------------------------------------------
 
   /// Force-stop everything and play directly with no crossfade at all.
-  Future<void> _directPlay(DeezerTrack track) async {
+  Future<void> _directPlay(DeezerTrack track, {Duration? startPosition}) async {
     final op = _nextPlaybackOp();
     _cancelTransitions();
     _cancelLoadingWatchdog();
@@ -451,7 +483,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     await _safeStopPlayer(_activePlayer);
     await _safeStopPlayer(_inactivePlayer);
     if (_isStalePlaybackOp(op)) return;
-    await _loadAndPlay(track, _activePlayer, op);
+    await _loadAndPlay(track, _activePlayer, op, startPosition: startPosition);
   }
 
   /// Start playback with optional crossfade.
@@ -518,26 +550,47 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
       String? url;
       String? userAgent;
+      Map<String, String>? customHeaders;
 
-      final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
-      if (localPath == null) {
-        await LocalProxy.ensureRunning();
-        appLogger.i(
-          'Resolving playback stream for ${track.artist?.name ?? ''} - ${track.title}',
-        );
-        final res = await _resolver
-            .resolveUrl(track)
-            .timeout(
-              const Duration(seconds: 22),
-              onTimeout: () {
-                appLogger.w('Stream resolution timed out for ${track.title}');
-                return null;
-              },
-            );
-        url = res?.url;
-        userAgent = res?.userAgent;
+      if (track.link == 'wave://audiobook' && track.preview != null) {
+        try {
+          final payload = jsonDecode(track.preview!);
+          final rawUrl = payload['url'] as String;
+          final isTorrent = payload['isTorrent'] == true;
+          if (isTorrent) {
+            final fileIndex = payload['torrentFileIndex'] as int;
+            url = await TorrentStreamService.instance.getStreamUrl(rawUrl, fileIndex);
+          } else {
+            url = rawUrl;
+          }
+          final headersMap = payload['httpHeaders'];
+          if (headersMap is Map) {
+            customHeaders = Map<String, String>.from(headersMap);
+          }
+        } catch (e) {
+          appLogger.e('Failed to parse audiobook track payload: $e');
+        }
       } else {
-        url = 'file://$localPath'; // Wrap local path in file:// URI
+        final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
+        if (localPath == null) {
+          await LocalProxy.ensureRunning();
+          appLogger.i(
+            'Resolving playback stream for ${track.artist?.name ?? ''} - ${track.title}',
+          );
+          final res = await _resolver
+              .resolveUrl(track)
+              .timeout(
+                const Duration(seconds: 22),
+                onTimeout: () {
+                  appLogger.w('Stream resolution timed out for ${track.title}');
+                  return null;
+                },
+              );
+          url = res?.url;
+          userAgent = res?.userAgent;
+        } else {
+          url = 'file://$localPath'; // Wrap local path in file:// URI
+        }
       }
       if (url == null) throw Exception('No audio source found');
       if (_isStalePlaybackOp(op)) return;
@@ -550,8 +603,12 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
+      final Map<String, String> mergedHeaders = {};
+      if (userAgent != null) mergedHeaders['User-Agent'] = userAgent;
+      if (customHeaders != null) mergedHeaders.addAll(customHeaders);
+
       await fadingInPlayer
-          .open(mk.Media(url, httpHeaders: userAgent != null ? {'User-Agent': userAgent} : null), play: true)
+          .open(mk.Media(url, httpHeaders: mergedHeaders.isNotEmpty ? mergedHeaders : null), play: true)
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
@@ -637,7 +694,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     });
   }
 
-  Future<void> _loadAndPlay(DeezerTrack track, mk.Player player, int op) async {
+  Future<void> _loadAndPlay(DeezerTrack track, mk.Player player, int op, {Duration? startPosition}) async {
     await player.pause();
     await player.setVolume(_state.volume * 100);
 
@@ -658,23 +715,64 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
       String? url;
       String? userAgent;
+      Map<String, String>? customHeaders;
 
-      final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
-      if (localPath == null) {
-        await LocalProxy.ensureRunning();
-        final res = await _resolver
-            .resolveUrl(track)
-            .timeout(
-              const Duration(seconds: 22),
-              onTimeout: () {
-                appLogger.w('Stream resolution timed out for ${track.title}');
-                return null;
-              },
-            );
-        url = res?.url;
-        userAgent = res?.userAgent;
+      if (track.link == 'wave://audiobook' && track.preview != null) {
+        try {
+          final payload = jsonDecode(track.preview!);
+          final rawUrl = payload['url'] as String;
+          final isTorrent = payload['isTorrent'] == true;
+          if (isTorrent) {
+            final fileIndex = payload['torrentFileIndex'] as int;
+            url = await TorrentStreamService.instance.getStreamUrl(rawUrl, fileIndex);
+          } else {
+            url = rawUrl;
+          }
+          final headersMap = payload['httpHeaders'];
+          if (headersMap is Map) {
+            customHeaders = Map<String, String>.from(headersMap);
+          }
+        } catch (e) {
+          appLogger.e('Failed to parse audiobook track payload: $e');
+        }
       } else {
-        url = 'file://$localPath';
+        final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
+        if (localPath == null) {
+          final settingsRaw = Hive.isBoxOpen(HiveBoxes.settings)
+              ? Hive.box<dynamic>(HiveBoxes.settings).get('app_settings')
+              : null;
+          AppSettings settings = const AppSettings();
+          if (settingsRaw is String && settingsRaw.isNotEmpty) {
+            try {
+              settings = AppSettings.fromJson(jsonDecode(settingsRaw));
+            } catch (_) {}
+          }
+
+          if (settings.audioQuality == AudioQuality.lossless) {
+            final octaveRes = await OctaveMusicService.instance.resolveLosslessUrl(track);
+            if (octaveRes != null) {
+              url = octaveRes.url;
+              customHeaders = octaveRes.headers;
+            }
+          }
+
+          if (url == null) {
+            await LocalProxy.ensureRunning();
+            final res = await _resolver
+                .resolveUrl(track)
+                .timeout(
+                  const Duration(seconds: 22),
+                  onTimeout: () {
+                    appLogger.w('Stream resolution timed out for ${track.title}');
+                    return null;
+                  },
+                );
+            url = res?.url;
+            userAgent = res?.userAgent;
+          }
+        } else {
+          url = 'file://$localPath';
+        }
       }
       if (_isStalePlaybackOp(op)) return;
 
@@ -702,13 +800,21 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
             'http://127.0.0.1:${LocalProxy.port}/proxy?url=$encodedUrl&ua=$encodedUa';
       }
 
+      final Map<String, String> mergedHeaders = {};
+      if (userAgent != null) mergedHeaders['User-Agent'] = userAgent;
+      if (customHeaders != null) mergedHeaders.addAll(customHeaders);
+
       await player
-          .open(mk.Media(url, httpHeaders: userAgent != null ? {'User-Agent': userAgent} : null), play: true)
+          .open(mk.Media(url, httpHeaders: mergedHeaders.isNotEmpty ? mergedHeaders : null), play: true)
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
           );
       await player.play().timeout(const Duration(seconds: 5), onTimeout: () {});
+      if (startPosition != null && startPosition > Duration.zero) {
+        await player.seek(startPosition);
+      }
+      
       if (_isStalePlaybackOp(op)) {
         await player.stop();
         return;
@@ -966,7 +1072,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   // Queue management ---------------------------------------------------------
 
   @override
-  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex}) async {
+  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex, Duration? startPosition}) async {
     if (tracks.isEmpty) return;
 
     int i;
@@ -999,7 +1105,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         shuffled: _state.shuffle,
       ),
     );
-    await _directPlay(current);
+    await _directPlay(current, startPosition: startPosition);
   }
 
   @override

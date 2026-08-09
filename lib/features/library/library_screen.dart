@@ -25,6 +25,8 @@ import '../../widgets/sub_tabs.dart';
 import '../../widgets/swipe_action_row.dart';
 import '../../core/auth/supabase_playlist_sync.dart';
 import '../../core/auth/supabase_auth_service.dart';
+import '../audiobooks/services/audiobook_providers.dart';
+import '../../core/models/audiobook.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
@@ -38,6 +40,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   static const List<String> _labels = <String>[
     'Liked',
+    'Audiobooks',
     'Albums',
     'Playlists',
     'Following',
@@ -88,14 +91,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   child: _LikedTracksTab(),
                 ),
                 1 => const KeyedSubtree(
+                  key: ValueKey<String>('audiobooks'),
+                  child: _LikedAudiobooksTab(),
+                ),
+                2 => const KeyedSubtree(
                   key: ValueKey<String>('albums'),
                   child: _LikedAlbumsTab(),
                 ),
-                2 => const KeyedSubtree(
+                3 => const KeyedSubtree(
                   key: ValueKey<String>('playlists'),
                   child: _PlaylistsTab(),
                 ),
-                3 => const KeyedSubtree(
+                4 => const KeyedSubtree(
                   key: ValueKey<String>('following'),
                   child: _FollowingTab(),
                 ),
@@ -406,6 +413,64 @@ String _durationText(int totalSecs) {
   final m = (totalSecs % 3600) ~/ 60;
   if (h > 0) return '${h}h ${m}m';
   return '${m}m';
+}
+
+// ---------------------------------------------------------------------------
+// Liked audiobooks --------------------------------------------------------
+
+class _LikedAudiobooksTab extends ConsumerWidget {
+  const _LikedAudiobooksTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final books = ref.watch(likedAudiobooksProvider);
+    final theme = AppThemeScope.of(context);
+
+    if (books.isEmpty) {
+      return _EmptyHint(
+        icon: PhosphorIconsRegular.books,
+        title: 'No audiobooks saved',
+        subtitle: 'Tap the heart on any audiobook to save it here.',
+      );
+    }
+
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: <Widget>[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: Text(
+              '${books.length} audiobook${books.length == 1 ? '' : 's'}',
+              style: TextStyle(
+                color: theme.onSurfaceMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.7,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
+            delegate: SliverChildBuilderDelegate((context, i) {
+              final book = books[i];
+              return AudiobookCard(
+                audiobook: book,
+              );
+            }, childCount: books.length),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 120)),
+      ],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1899,21 +1964,25 @@ class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
   Future<void> _exportBackup() async {
     if (_exporting) return;
 
-    setState(() => _exporting = true);
-
     try {
+      final selectedDir = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select folder to export downloaded music',
+      );
+
+      if (selectedDir == null || selectedDir.trim().isEmpty) return;
+
+      setState(() => _exporting = true);
+
       final result = await ref
           .read(downloadManagerProvider)
-          .exportDownloadsBackup();
+          .exportDownloadsToDirectory(selectedDir);
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Downloads exported: ${result.filesCopied} files · '
-            '${_formatBytes(result.bytesCopied)} → '
-            'Internal storage/Download/WAVE/wave_downloads',
+            'Exported ${result.filesCopied} songs (${_formatBytes(result.bytesCopied)}) → $selectedDir',
           ),
         ),
       );
@@ -1922,10 +1991,7 @@ class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Could not export to Internal storage/Download/WAVE/wave_downloads. '
-            'Android may have blocked public Download folder access on this device. $e',
-          ),
+          content: Text('Could not export songs to selected folder: $e'),
         ),
       );
     } finally {
@@ -1976,22 +2042,33 @@ class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
                 style: TextStyle(color: theme.onSurfaceMuted, fontSize: 11),
               ),
               const SizedBox(height: 10),
-              _SmallActionButton(
-                label: 'Open folder',
-                icon: PhosphorIconsRegular.folderOpen,
-                onTap: () async {
-                  try {
-                    await ref
-                        .read(downloadManagerProvider)
-                        .openDownloadsFolder();
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(e.toString())));
-                    }
-                  }
-                },
+              Row(
+                children: <Widget>[
+                  _SmallActionButton(
+                    label: 'Open folder',
+                    icon: PhosphorIconsRegular.folderOpen,
+                    onTap: () async {
+                      try {
+                        await ref
+                            .read(downloadManagerProvider)
+                            .openDownloadsFolder();
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(e.toString())));
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _SmallActionButton(
+                    label: _exporting ? 'Exporting...' : 'Export to folder...',
+                    icon: PhosphorIconsRegular.export,
+                    onTap: _exporting ? () {} : _exportBackup,
+                    filled: true,
+                  ),
+                ],
               ),
             ],
           ),
@@ -2011,7 +2088,7 @@ class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'Downloads backup',
+            'Export downloaded music',
             style: TextStyle(
               color: theme.onSurface,
               fontSize: 13,
@@ -2020,42 +2097,24 @@ class _DownloadLocationCardState extends ConsumerState<_DownloadLocationCard> {
           ),
           const SizedBox(height: 6),
           Text(
-            'WAVE keeps songs in private app storage so offline playback works.',
+            'WAVE stores songs in private app storage. Use the folder picker to export your music files anywhere on your device.',
             style: TextStyle(
               color: theme.onSurfaceMuted,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Export backup copies them to:',
-            style: TextStyle(
-              color: theme.onSurfaceMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Internal storage/Download/WAVE/wave_downloads',
-            style: TextStyle(
-              color: theme.onSurface,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
           const SizedBox(height: 10),
           _SmallActionButton(
-            label: _exporting ? 'Exporting...' : 'Export backup',
-            icon: PhosphorIconsRegular.export,
+            label: _exporting ? 'Exporting...' : 'Select folder & Export',
+            icon: PhosphorIconsRegular.folderSimplePlus,
             onTap: _exporting ? () {} : _exportBackup,
             filled: true,
           ),
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'This is a copy/backup. WAVE will still play from its private folder.',
+              'Music files will be exported in their original format (.flac, .mp3, .m4a).',
               style: TextStyle(
                 color: theme.onSurfaceMuted,
                 fontSize: 10.5,

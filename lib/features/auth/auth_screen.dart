@@ -3,15 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../core/auth/supabase_auth_service.dart';
-import '../../core/auth/supabase_playlist_sync.dart';
-import '../../core/auth/supabase_library_sync.dart';
-import '../../core/auth/supabase_profile_service.dart';
-import '../../core/storage/library_providers.dart';
+import '../../core/auth/sync_manager.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
-import 'dart:convert';
-import 'package:hive_flutter/hive_flutter.dart';
-import '../../core/storage/hive_boxes.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -73,103 +67,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         );
       }
       if (mounted) {
-        // Helper to convert objects to safe Hive JSON
-        Map<String, dynamic> deepJson(Map<String, dynamic> json) =>
-            jsonDecode(jsonEncode(json)) as Map<String, dynamic>;
+        // Perform full 2-way account & audiobook sync with Supabase
+        await ref.read(syncManagerProvider).performFullSync();
 
-        // 1. Download existing remote library to local (Merge)
-        final tracksBox = Hive.box<dynamic>(HiveBoxes.likedTracks);
-        final albumsBox = Hive.box<dynamic>(HiveBoxes.likedAlbums);
-        final artistsBox = Hive.box<dynamic>(HiveBoxes.followedArtists);
-
-        await ref
-            .read(supabaseLibrarySyncProvider)
-            .downloadLibrary(
-              onTrackFound: (track) async {
-                if (!tracksBox.containsKey(track.id)) {
-                  await tracksBox.put(track.id, deepJson(track.toJson()));
-                }
-              },
-              onAlbumFound: (album) async {
-                if (!albumsBox.containsKey(album.id)) {
-                  await albumsBox.put(album.id, deepJson(album.toJson()));
-                }
-              },
-              onArtistFound: (artist) async {
-                if (!artistsBox.containsKey(artist.id)) {
-                  await artistsBox.put(artist.id, deepJson(artist.toJson()));
-                }
-              },
-              onPlaylistFound: (playlist) async {
-                final likedPlaylistsBox = Hive.box<dynamic>(
-                  HiveBoxes.likedPlaylists,
-                );
-                if (!likedPlaylistsBox.containsKey(playlist.id.toString())) {
-                  await likedPlaylistsBox.put(
-                    playlist.id.toString(),
-                    deepJson(playlist.toJson()),
-                  );
-                }
-              },
-            );
-
-        // 2. Download existing remote playlists to local (Merge)
-        final playlistsBox = Hive.box<dynamic>(HiveBoxes.playlists);
-        final playlistTracksBox = Hive.box<dynamic>(HiveBoxes.playlistTracks);
-
-        await ref
-            .read(supabasePlaylistSyncProvider)
-            .downloadPlaylists(
-              onPlaylistFound: (playlist, tracks) async {
-                final existingTitles = playlistsBox.values
-                    .whereType<Map>()
-                    .map((m) => m['title']?.toString() ?? '')
-                    .toSet();
-                if (!existingTitles.contains(playlist.title)) {
-                  await playlistsBox.put(
-                    playlist.id.toString(),
-                    deepJson(playlist.toJson()),
-                  );
-                  await playlistTracksBox.put(
-                    playlist.id.toString(),
-                    tracks.map((t) => deepJson(t.toJson())).toList(),
-                  );
-                }
-              },
-            );
-
-        // 3. Sync local playlists upward (Bulk Upsert)
-        final playlists = ref.read(userPlaylistsProvider);
-        final trackMap = ref.read(localPlaylistTracksProvider);
-        await ref
-            .read(supabasePlaylistSyncProvider)
-            .syncAllPlaylists(playlists: playlists, trackMap: trackMap);
-
-        // 4. Sync local library upward (Bulk Upsert)
-        final likedTracks = ref.read(likedTracksProvider);
-        final likedAlbums = ref.read(likedAlbumsProvider);
-        final following = ref.read(followedArtistsProvider);
-        final likedPlaylists = ref.read(likedPlaylistsProvider);
-        await ref
-            .read(supabaseLibrarySyncProvider)
-            .syncAll(
-              tracks: likedTracks,
-              albums: likedAlbums,
-              artists: following,
-              playlists: likedPlaylists,
-            );
-
-        // Invalidate to reload UI with merged data, wait a bit to avoid build phase conflicts
-        await Future.delayed(const Duration(milliseconds: 100));
         if (!mounted) return;
-        ref.invalidate(likedTracksProvider);
-        ref.invalidate(likedAlbumsProvider);
-        ref.invalidate(followedArtistsProvider);
-        ref.invalidate(likedPlaylistsProvider);
-        ref.invalidate(userPlaylistsProvider);
-        ref.invalidate(localPlaylistTracksProvider);
-        ref.invalidate(currentProfileProvider);
-
         context.go(AppRoutes.home);
       }
     } catch (e) {

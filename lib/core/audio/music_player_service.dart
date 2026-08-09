@@ -42,7 +42,7 @@ abstract class MusicPlayerService {
 
   /// Replaces the current queue with [tracks] and starts at [startIndex].
   /// If [startIndex] is null, it defaults to 0, but if shuffle is active, it picks a random start index.
-  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex});
+  Future<void> playTracks(List<DeezerTrack> tracks, {int? startIndex, Duration? startPosition});
 
   Future<void> addToQueueNext(DeezerTrack track);
   Future<void> addToQueueLast(DeezerTrack track);

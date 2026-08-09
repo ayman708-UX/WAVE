@@ -16,6 +16,9 @@ import '../../core/router/app_router.dart';
 import '../../core/storage/library_providers.dart';
 import '../../core/api/deezer_api_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../audiobooks/services/audiobook_providers.dart';
+import '../../core/models/audiobook.dart';
+import 'dart:convert';
 import '../../widgets/player/heart_like_button.dart';
 import '../../widgets/player/lyrics_view.dart';
 import '../../widgets/player/more_options_sheet.dart';
@@ -356,10 +359,34 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ),
               _DownloadButton(track: track),
-              HeartLikeButton(
-                liked: liked,
-                onTap: () =>
-                    ref.read(likedTracksProvider.notifier).toggle(track),
+              Consumer(
+                builder: (context, ref, child) {
+                  final isAudiobook = track.link == 'wave://audiobook';
+                  bool isItemLiked = liked;
+                  
+                  if (isAudiobook && track.preview != null) {
+                    try {
+                      final payload = jsonDecode(track.preview!);
+                      final book = Audiobook.fromJson(payload['audiobook']);
+                      isItemLiked = ref.watch(likedAudiobooksProvider.notifier).isLiked(book.uuid);
+                    } catch (_) {}
+                  }
+
+                  return HeartLikeButton(
+                    liked: isItemLiked,
+                    onTap: () {
+                      if (isAudiobook && track.preview != null) {
+                        try {
+                          final payload = jsonDecode(track.preview!);
+                          final book = Audiobook.fromJson(payload['audiobook']);
+                          ref.read(likedAudiobooksProvider.notifier).toggle(book);
+                        } catch (_) {}
+                      } else {
+                        ref.read(likedTracksProvider.notifier).toggle(track);
+                      }
+                    },
+                  );
+                },
               ),
             ],
           ),

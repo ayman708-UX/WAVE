@@ -5,13 +5,13 @@ import 'package:hive/hive.dart';
 
 import 'hive_boxes.dart';
 
-enum AudioQuality { standard, high, lossless }
+enum AudioQuality { youtube, lossless }
 
 enum AppLanguage { english, french, spanish, german, japanese }
 
 class AppSettings {
   const AppSettings({
-    this.audioQuality = AudioQuality.high,
+    this.audioQuality = AudioQuality.youtube,
     this.crossfadeSeconds = 0,
     this.equalizerBandsDb = const <double>[0, 0, 0, 0, 0],
     this.downloadOnWifiOnly = true,
@@ -65,10 +65,10 @@ class AppSettings {
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
-    AudioQuality quality(String? n) => AudioQuality.values.firstWhere(
-      (e) => e.name == n,
-      orElse: () => AudioQuality.high,
-    );
+    AudioQuality quality(String? n) {
+      if (n == 'lossless') return AudioQuality.lossless;
+      return AudioQuality.youtube;
+    }
     AppLanguage lang(String? n) => AppLanguage.values.firstWhere(
       (e) => e.name == n,
       orElse: () => AppLanguage.english,

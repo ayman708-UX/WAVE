@@ -35,6 +35,10 @@ class SettingsScreen extends ConsumerWidget {
             SizedBox(height: 24),
             _AccountSection(),
             SizedBox(height: 28),
+            _SectionTitle('Audio Quality'),
+            SizedBox(height: 12),
+            _AudioQualityCard(),
+            SizedBox(height: 28),
             _SectionTitle('Themes'),
             SizedBox(height: 12),
             _ThemeCarousel(),
@@ -913,7 +917,7 @@ class _AboutBlockState extends State<_AboutBlock> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'v1.0.7  ·  Build 8',
+                      'v1.0.8  ·  Build 9',
                       style: TextStyle(
                         color: theme.onSurfaceMuted,
                         fontSize: 12,
@@ -961,6 +965,161 @@ class _AboutBlockState extends State<_AboutBlock> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Audio Quality Card --------------------------------------------------------
+
+class _AudioQualityCard extends ConsumerWidget {
+  const _AudioQualityCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = AppThemeScope.of(context);
+    final currentQuality = ref.watch(appSettingsProvider).audioQuality;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                PhosphorIconsRegular.waveform,
+                color: theme.accent,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Audio Source & Quality',
+                      style: TextStyle(
+                        color: theme.onSurface,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Select preferred streaming and download quality',
+                      style: TextStyle(
+                        color: theme.onSurfaceMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _QualityOptionTile(
+                  title: 'YouTube',
+                  subtitle: 'Fast streaming (Default)',
+                  icon: PhosphorIconsRegular.youtubeLogo,
+                  isSelected: currentQuality == AudioQuality.youtube,
+                  onTap: () {
+                    ref.read(appSettingsProvider.notifier).setAudioQuality(AudioQuality.youtube);
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _QualityOptionTile(
+                  title: 'Lossless',
+                  subtitle: 'FLAC via Octave',
+                  icon: PhosphorIconsRegular.sparkle,
+                  isSelected: currentQuality == AudioQuality.lossless,
+                  onTap: () {
+                    ref.read(appSettingsProvider.notifier).setAudioQuality(AudioQuality.lossless);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QualityOptionTile extends StatelessWidget {
+  const _QualityOptionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemeScope.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? theme.accent.withValues(alpha: 0.15) : theme.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? theme.accent : theme.onSurface.withValues(alpha: 0.1),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isSelected ? theme.accent : theme.onSurfaceMuted,
+                ),
+                const Spacer(),
+                if (isSelected)
+                  Icon(
+                    PhosphorIconsFill.checkCircle,
+                    size: 16,
+                    color: theme.accent,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(
+                color: theme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: theme.onSurfaceMuted,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
