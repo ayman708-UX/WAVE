@@ -28,7 +28,7 @@ dependencies:
   android_intent_plus: ^5.3.0
   package_info_plus: ^8.3.0
   open_filex: ^4.7.0
-  libtorrent_flutter: 1.8.2
+  libtorrent_flutter: ^1.9.2
   file_picker: ^10.3.0
   archive: ^4.0.4
   xml: ^6.5.0
