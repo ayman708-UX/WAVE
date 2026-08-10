@@ -23,6 +23,7 @@ abstract class PlayerState with _$PlayerState {
     @Default(false) bool shuffle,
     @Default(RepeatMode.off) RepeatMode repeat,
     @Default(1.0) double volume,
+    @Default(1.0) double speed,
     @Default(0) int crossfadeSeconds,
     @Default(Duration(milliseconds: 500)) Duration transitionDuration,
     String? errorMessage,

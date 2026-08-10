@@ -34,6 +34,7 @@ abstract class MusicPlayerService {
   Future<void> setShuffle(bool value);
   Future<void> setRepeat(RepeatMode mode);
   Future<void> setVolume(double volume);
+  Future<void> setSpeed(double speed);
   Future<void> setCrossfadeSeconds(int seconds);
 
   // ---------------------------------------------------------------------------

@@ -8,6 +8,8 @@ import '../core/api/models/player_state.dart';
 import '../core/audio/player_providers.dart';
 import '../core/router/app_router.dart';
 import '../core/theme/app_theme.dart';
+import '../features/player/now_playing_screen.dart';
+import 'player/more_options_sheet.dart';
 
 /// Persistent mini-player. Animates in from the bottom when a track is
 /// loaded. Tap expands to the Now Playing screen.
@@ -154,6 +156,32 @@ class _MiniPlayerCard extends ConsumerWidget {
                     color: theme.onSurface,
                     onTap: () => ref.read(playerControlsProvider).skipNext(),
                   ),
+                  if (track.link == 'wave://audiobook')
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => showWaveSheet<void>(
+                        context: context,
+                        builder: (_) => const AudioSpeedDial(),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        margin: const EdgeInsets.only(left: 4, right: 6),
+                        decoration: BoxDecoration(
+                          color: state.speed != 1.0
+                              ? theme.accent
+                              : theme.onSurface.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${state.speed == state.speed.truncateToDouble() ? state.speed.toInt() : state.speed}x',
+                          style: TextStyle(
+                            color: state.speed != 1.0 ? theme.background : theme.onSurface,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   const SizedBox(width: 4),
                 ],
               ),

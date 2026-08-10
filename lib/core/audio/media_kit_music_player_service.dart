@@ -7,6 +7,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
 import '../../features/audiobooks/services/torrent_stream_service.dart';
+import '../api/debrid_api.dart';
 import '../api/deezer_api_client.dart';
 import '../api/lastfm_api_client.dart';
 import '../api/models/deezer_track.dart';
@@ -554,15 +555,8 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
       if (track.link == 'wave://audiobook' && track.preview != null) {
         try {
-          final payload = jsonDecode(track.preview!);
-          final rawUrl = payload['url'] as String;
-          final isTorrent = payload['isTorrent'] == true;
-          if (isTorrent) {
-            final fileIndex = payload['torrentFileIndex'] as int;
-            url = await TorrentStreamService.instance.getStreamUrl(rawUrl, fileIndex);
-          } else {
-            url = rawUrl;
-          }
+          final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
+          url = await _resolveAudiobookTrackUrl(track, payload);
           final headersMap = payload['httpHeaders'];
           if (headersMap is Map) {
             customHeaders = Map<String, String>.from(headersMap);
@@ -694,9 +688,57 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     });
   }
 
+  Future<String?> _resolveAudiobookTrackUrl(DeezerTrack track, Map<String, dynamic> payload) async {
+    final rawUrl = payload['url'] as String;
+    final isTorrent = payload['isTorrent'] == true;
+    if (!isTorrent) return rawUrl;
+
+    final bookData = payload['audiobook'] as Map?;
+    final source = (bookData?['source'] as String? ?? '').toLowerCase();
+    final fileIndex = payload['torrentFileIndex'] as int?;
+
+    final isAudiobookBay = source.contains('audiobookbay') ||
+        source.contains('audiobook_bay') ||
+        source.contains('audiobook bay') ||
+        source == 'abb' ||
+        rawUrl.startsWith('magnet:');
+
+    if (isAudiobookBay) {
+      final activeDebrid = await DebridApi().getActiveDebridService();
+      if (activeDebrid != null && activeDebrid.isNotEmpty) {
+        appLogger.i('[Debrid] Resolving AudiobookBay magnet via active service ($activeDebrid)...');
+        try {
+          final files = await DebridApi().resolveByService(
+            activeDebrid,
+            rawUrl,
+            fileIndex: fileIndex,
+            filename: track.title,
+          );
+          if (files.isNotEmpty && files.first.downloadUrl.isNotEmpty) {
+            final debridUrl = files.first.downloadUrl;
+            appLogger.i('[Debrid] Successfully resolved stream URL via $activeDebrid: $debridUrl');
+            return debridUrl;
+          }
+        } catch (e) {
+          appLogger.e('[Debrid] Resolution via $activeDebrid failed: $e. Falling back to libtorrent...');
+        }
+      } else {
+        appLogger.i('[Debrid] No active Debrid service key found.');
+      }
+    }
+
+    appLogger.i('[TorrentStream] Falling back to libtorrent engine for Audiobook track: ${track.title}');
+    return await TorrentStreamService.instance.getStreamUrl(rawUrl, fileIndex ?? 0);
+  }
+
   Future<void> _loadAndPlay(DeezerTrack track, mk.Player player, int op, {Duration? startPosition}) async {
     await player.pause();
     await player.setVolume(_state.volume * 100);
+    if (track.link == 'wave://audiobook') {
+      await player.setRate(_state.speed);
+    } else {
+      await player.setRate(1.0);
+    }
 
     _setLoadingForOp(op, true);
     _emitPlayer(
@@ -719,15 +761,8 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
       if (track.link == 'wave://audiobook' && track.preview != null) {
         try {
-          final payload = jsonDecode(track.preview!);
-          final rawUrl = payload['url'] as String;
-          final isTorrent = payload['isTorrent'] == true;
-          if (isTorrent) {
-            final fileIndex = payload['torrentFileIndex'] as int;
-            url = await TorrentStreamService.instance.getStreamUrl(rawUrl, fileIndex);
-          } else {
-            url = rawUrl;
-          }
+          final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
+          url = await _resolveAudiobookTrackUrl(track, payload);
           final headersMap = payload['httpHeaders'];
           if (headersMap is Map) {
             customHeaders = Map<String, String>.from(headersMap);
@@ -1060,6 +1095,15 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     _emitPlayer(_state.copyWith(volume: v));
     if (!_isCrossfading) {
       await _activePlayer.setVolume(v * 100);
+    }
+  }
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    final s = speed.clamp(0.25, 4.0);
+    _emitPlayer(_state.copyWith(speed: s));
+    if (_state.currentTrack?.link == 'wave://audiobook') {
+      await _activePlayer.setRate(s);
     }
   }
 

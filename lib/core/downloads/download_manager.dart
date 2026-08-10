@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
+import '../api/debrid_api.dart';
 import '../api/models/deezer_track.dart';
 import '../audio/youtube_stream_resolver.dart';
 import '../audio/youtube_rate_limit_guard.dart';
@@ -833,7 +834,32 @@ class DownloadManager {
         final rawUrl = payload['url'] as String;
         final isTorrent = payload['isTorrent'] == true;
         if (isTorrent) {
-          throw Exception('Downloading torrent audiobooks is not supported yet.');
+          final bookData = payload['audiobook'] as Map?;
+          final source = (bookData?['source'] as String? ?? '').toLowerCase();
+          final fileIndex = payload['torrentFileIndex'] as int?;
+
+          final isAudiobookBay = source.contains('audiobookbay') ||
+              source.contains('audiobook_bay') ||
+              source.contains('audiobook bay') ||
+              source == 'abb';
+
+          if (isAudiobookBay) {
+            final activeDebrid = await DebridApi().getActiveDebridService();
+            if (activeDebrid != null && activeDebrid.isNotEmpty) {
+              final files = await DebridApi().resolveByService(
+                activeDebrid,
+                rawUrl,
+                fileIndex: fileIndex,
+                filename: track.title,
+              );
+              if (files.isNotEmpty && files.first.downloadUrl.isNotEmpty) {
+                url = files.first.downloadUrl;
+              }
+            }
+          }
+          if (url == null || url.isEmpty) {
+            throw Exception('Downloading AudiobookBay torrent audiobooks requires a Debrid service configured in Settings.');
+          }
         } else {
           url = rawUrl;
         }

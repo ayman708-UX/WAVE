@@ -1,0 +1,13 @@
+{
+  "name": "wave-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker HTTP API Proxy",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.109.2"
+  }
+}

@@ -501,6 +501,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   ),
                 ),
               ),
+              if (track.link == 'wave://audiobook')
+                _BottomTextButton(
+                  icon: PhosphorIconsRegular.gauge,
+                  label: '${player.speed == player.speed.truncateToDouble() ? player.speed.toInt() : player.speed}X',
+                  accent: player.speed != 1.0,
+                  onTap: () => showWaveSheet<void>(
+                    context: context,
+                    builder: (_) => const AudioSpeedDial(),
+                  ),
+                ),
               _BottomTextButton(
                 icon: PhosphorIconsRegular.musicNotes,
                 label: _showLyrics ? 'COVER' : 'LYRICS',
@@ -845,3 +855,83 @@ class _DownloadButton extends ConsumerWidget {
     );
   }
 }
+
+class AudioSpeedDial extends ConsumerWidget {
+  const AudioSpeedDial({super.key});
+
+  static const speeds = <double>[0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = AppThemeScope.of(context);
+    final player = ref.watch(playerSnapshotProvider);
+    final currentSpeed = player.speed;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(PhosphorIconsRegular.gauge, color: theme.accent, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Audiobook Playback Speed',
+                    style: TextStyle(
+                      color: theme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: Icon(PhosphorIconsRegular.x, color: theme.onSurfaceMuted),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: speeds.map((s) {
+              final isSelected = (currentSpeed - s).abs() < 0.05;
+              final label = s == s.truncateToDouble()
+                  ? '${s.toInt()}x'
+                  : '${s}x';
+
+              return ChoiceChip(
+                label: Text(label),
+                selected: isSelected,
+                selectedColor: theme.accent,
+                backgroundColor: theme.background,
+                labelStyle: TextStyle(
+                  color: isSelected ? theme.background : theme.onSurface,
+                  fontWeight: FontWeight.bold,
+                ),
+                onSelected: (selected) {
+                  if (selected) {
+                    ref.read(playerControlsProvider).setSpeed(s);
+                    Navigator.of(context).pop();
+                  }
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+

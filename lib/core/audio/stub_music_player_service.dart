@@ -189,6 +189,11 @@ class StubMusicPlayerService implements MusicPlayerService {
   }
 
   @override
+  Future<void> setSpeed(double speed) async {
+    _emitPlayer(_player.copyWith(speed: speed.clamp(0.25, 4.0)));
+  }
+
+  @override
   Future<void> setCrossfadeSeconds(int seconds) async {
     _emitPlayer(_player.copyWith(crossfadeSeconds: seconds.clamp(0, 12)));
   }

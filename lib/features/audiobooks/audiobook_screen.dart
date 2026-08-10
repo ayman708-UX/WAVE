@@ -13,6 +13,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../widgets/detail_track_row.dart';
 import '../../../widgets/play_shuffle_pair.dart';
 import '../../../widgets/shimmer.dart';
+import '../../../widgets/player/more_options_sheet.dart';
+import '../player/now_playing_screen.dart';
 import 'services/audiobook_scraper_service.dart';
 import 'services/audiobook_providers.dart';
 
@@ -207,6 +209,51 @@ class _AudiobookScreenState extends ConsumerState<AudiobookScreen> {
                                 await controls.playTracks(tracks);
                               },
                             ),
+                          ),
+                          Consumer(
+                            builder: (context, ref, _) {
+                              final player = ref.watch(playerSnapshotProvider);
+                              final speed = player.speed;
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: InkWell(
+                                  onTap: () => showWaveSheet<void>(
+                                    context: context,
+                                    builder: (_) => const AudioSpeedDial(),
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: speed != 1.0
+                                          ? theme.accent
+                                          : theme.surface,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: theme.onSurface.withValues(alpha: 0.1)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          PhosphorIconsRegular.gauge,
+                                          size: 18,
+                                          color: speed != 1.0 ? theme.background : theme.onSurface,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${speed == speed.truncateToDouble() ? speed.toInt() : speed}x',
+                                          style: TextStyle(
+                                            color: speed != 1.0 ? theme.background : theme.onSurface,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
