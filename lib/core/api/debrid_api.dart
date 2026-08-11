@@ -104,24 +104,21 @@ class DebridApi {
     await _safeWrite(_debridServiceKey, service.trim());
   }
 
-  /// Returns the active debrid service to use.
-  /// If explicitly configured and valid key exists, returns that service.
-  /// Otherwise auto-detects the first provider that has a non-empty saved API key.
+  /// Returns the active debrid service strictly based on the dropdown selection.
+  /// If 'None' or empty is selected, Debrid is OFF and returns null.
+  /// If a provider is selected but has no saved API key, throws an Exception.
   Future<String?> getActiveDebridService() async {
     final selected = await getDebridService();
-    if (selected != null && selected != 'None' && selected.isNotEmpty) {
-      if (await hasKeyForService(selected)) {
-        return selected;
-      }
+    if (selected == null || selected == 'None' || selected.isEmpty) {
+      return null; // Debrid is OFF!
     }
-    // Auto-detect first configured service if no active provider set or key missing for selected
-    if ((await getTorBoxKey())?.isNotEmpty == true) return 'TorBox';
-    if ((await getRDAccessToken())?.isNotEmpty == true) return 'Real-Debrid';
-    if ((await getAllDebridKey())?.isNotEmpty == true) return 'AllDebrid';
-    if ((await getPremiumizeKey())?.isNotEmpty == true) return 'Premiumize';
-    if ((await getDebridLinkKey())?.isNotEmpty == true) return 'Debrid-Link';
 
-    return null;
+    final hasKey = await hasKeyForService(selected);
+    if (!hasKey) {
+      throw Exception('Selected Debrid provider ($selected) has no API key saved. Please enter and save your API key in Settings.');
+    }
+
+    return selected;
   }
 
   Future<bool> hasKeyForService(String service) async {

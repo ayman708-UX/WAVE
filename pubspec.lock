@@ -684,10 +684,10 @@ packages:
     dependency: "direct main"
     description:
       name: libtorrent_flutter
-      sha256: ee514f12b305c4d0f860aa4b03a9eb8d7096ba9c751c5ef80c0088e799af9790
+      sha256: "235bd0e28e752cdc977e9a2b2af0873f9b7e809687f39c902994d946dd68781b"
       url: "https://pub.dev"
     source: hosted
-    version: "1.9.2"
+    version: "1.8.4"
   lints:
     dependency: transitive
     description:

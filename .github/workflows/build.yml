@@ -34,6 +34,20 @@ jobs:
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
+
+      - name: Pre-download & extract libtorrent_flutter Windows binaries
+        shell: pwsh
+        run: |
+          $dir = "build\windows\x64\plugins\libtorrent_flutter"
+          New-Item -ItemType Directory -Force -Path $dir
+          $zip = "$dir\windows-native-lib-x64.zip"
+          try {
+            Invoke-WebRequest -Uri "https://github.com/nabil20040/libtorrent_flutter/releases/download/v1.8.4/windows-native-lib-x64.zip" -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath $dir -Force
+          } catch {
+            Write-Host "Pre-download skipped or failed: $_"
+          }
+
       - run: flutter build windows --release
 
       - name: Install Inno Setup

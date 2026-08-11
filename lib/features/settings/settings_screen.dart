@@ -1252,6 +1252,13 @@ class _DebridCardState extends State<_DebridCard> {
               if (val != null) {
                 setState(() => _selectedService = val);
                 await DebridApi().saveDebridService(val);
+                if (val != 'None') {
+                  final hasKey = await DebridApi().hasKeyForService(val);
+                  if (!hasKey) {
+                    _showSnack('$val selected, but has no API key saved yet. Please enter and save your API key below.');
+                    return;
+                  }
+                }
                 _showSnack('Active Debrid service set to $val');
               }
             },

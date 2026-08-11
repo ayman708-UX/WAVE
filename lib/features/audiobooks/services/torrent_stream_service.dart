@@ -59,6 +59,39 @@ class TorrentStreamService {
     }
   }
 
+  Future<List<FileInfo>> getTorrentAudioFiles(String magnet) async {
+    try {
+      final ready = await start();
+      if (!ready) return [];
+
+      final infoHash = _extractHash(magnet);
+      if (infoHash == null) return [];
+
+      int? torrentId = _activeTorrents[infoHash];
+      if (torrentId == null) {
+        torrentId = LibtorrentFlutter.instance.addMagnet(magnet, null, false);
+        _activeTorrents[infoHash] = torrentId;
+      }
+
+      final files = await _waitForMetadata(torrentId, timeout: const Duration(seconds: 12));
+      if (files == null || files.isEmpty) return [];
+
+      final constExts = {'.mp3', '.m4b', '.m4a', '.aac', '.flac', '.ogg', '.opus', '.wav', '.wma'};
+      final audioFiles = <FileInfo>[];
+      for (final f in files) {
+        final name = f.path.split('/').last.split('\\').last;
+        final lower = name.toLowerCase();
+        if (constExts.any((ext) => lower.endsWith(ext))) {
+          audioFiles.add(f);
+        }
+      }
+      return audioFiles;
+    } catch (e) {
+      debugPrint('[TorrentStream] getTorrentAudioFiles error: $e');
+      return [];
+    }
+  }
+
   static final _hashRegExp = RegExp(r'[0-9a-fA-F]{40}');
   String? _extractHash(String magnetOrHash) {
     final btih = RegExp(r'btih:([0-9a-fA-F]{40})', caseSensitive: false)
@@ -217,9 +250,9 @@ class TorrentStreamService {
           byFile[streamIdx] = streamInfo.id;
           var streamUrl = streamInfo.url;
           try {
-            // Give MPV a format hint via the URL
+            // Give MPV a format hint via the URL path
             final ext = (fi as dynamic).path ?? (fi as dynamic).name ?? 'audio.mp3';
-            streamUrl += (streamUrl.contains('?') ? '&' : '?') + 'filename=${Uri.encodeComponent(ext)}';
+            streamUrl += '/' + Uri.encodeComponent(ext.split('/').last);
           } catch (_) {}
           _audiobookStreamUrls.putIfAbsent(key, () => {})[streamIdx] = streamUrl;
           return streamUrl;

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../../core/api/debrid_api.dart';
 import '../../../core/models/audiobook.dart';
+import 'torrent_stream_service.dart';
 
 class AudiobookBayScraper {
   static const String _baseUrl = 'https://audiobookbay.lu';
@@ -86,29 +88,67 @@ class AudiobookBayScraper {
       
       final magnetString = magnetUri.toString();
 
-      // Extract files from the HTML table to build the chapters list
-      // Audiobookbay lists files in a table usually like:
-      // <tr><td>1. 01.mp3</td><td>10.5 MB</td></tr>
-      // We'll use a regex to find audio files. We need their index in the torrent.
-      
+      // Extract files from HTML page
       final RegExp fileExp = RegExp(
-          r'<tr>\s*<td>\s*(?:<img[^>]*>\s*)?([^<]+\.(?:mp3|m4b|m4a|aac|flac|ogg|opus|wav|wma))\s*</td>',
+          r"(?:<td>|<li>|<code>|<pre>|class=\x22torrent_files\x22|class=\x22file_list\x22|>|\n|^)\s*([a-zA-Z0-9_\-\.\s\(\)\[\]\,']+\.(?:mp3|m4b|m4a|aac|flac|ogg|opus|wav|wma))",
           caseSensitive: false);
 
       final chapters = <AudiobookChapter>[];
+      final seenFiles = <String>{};
       int fileIndex = 0;
+
       for (final m in fileExp.allMatches(res.body)) {
         final filename = m.group(1)!.trim();
+        if (filename.isEmpty || !seenFiles.add(filename.toLowerCase())) continue;
+
         chapters.add(AudiobookChapter(
           title: filename,
-          url: magnetString, // The URL is the magnet link itself!
+          url: magnetString,
           isTorrent: true,
           torrentFileIndex: fileIndex,
         ));
         fileIndex++;
       }
 
-      // If we couldn't parse the files from the HTML, just return one "Full Torrent" chapter
+      // If HTML scraping couldn't find multi-file chapters, auto-expand via Debrid or local Torrent engine
+      if (chapters.length <= 1) {
+        try {
+          final activeDebrid = await DebridApi().getActiveDebridService();
+          if (activeDebrid != null && activeDebrid.isNotEmpty) {
+            final debridFiles = await DebridApi().resolveByService(activeDebrid, magnetString);
+            if (debridFiles.isNotEmpty && debridFiles.length > 1) {
+              chapters.clear();
+              for (int i = 0; i < debridFiles.length; i++) {
+                chapters.add(AudiobookChapter(
+                  title: debridFiles[i].filename,
+                  url: magnetString,
+                  isTorrent: true,
+                  torrentFileIndex: i,
+                ));
+              }
+            }
+          } else {
+            // Debrid is OFF -> try local torrent engine metadata to extract all audio files
+            final torrentFiles = await TorrentStreamService.instance.getTorrentAudioFiles(magnetString);
+            if (torrentFiles.isNotEmpty && torrentFiles.length > 1) {
+              chapters.clear();
+              for (int i = 0; i < torrentFiles.length; i++) {
+                final fileInfo = torrentFiles[i];
+                final name = fileInfo.path.split('/').last.split('\\').last;
+                chapters.add(AudiobookChapter(
+                  title: name,
+                  url: magnetString,
+                  isTorrent: true,
+                  torrentFileIndex: fileInfo.index,
+                ));
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('AudiobookBay chapter auto-expansion error: $e');
+        }
+      }
+
       if (chapters.isEmpty) {
         chapters.add(AudiobookChapter(
           title: 'Full Audiobook Torrent',
