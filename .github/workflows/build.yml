@@ -46,7 +46,7 @@ jobs:
             $prebuiltDir = Join-Path $pkgDir.FullName "prebuilt\windows"
             New-Item -ItemType Directory -Force -Path $prebuiltDir
             
-            $urlX64 = "https://github.com/nabil20040/libtorrent_flutter/releases/download/v1.8.4/windows-native-lib-x64.zip"
+            $urlX64 = "https://github.com/ayman708-UX/libtorrent_flutter/releases/download/v1.8.4/windows-native-lib-x64.zip"
             $zipX64 = Join-Path $prebuiltDir "x64.zip"
             Invoke-WebRequest -Uri $urlX64 -OutFile $zipX64
             Expand-Archive -Path $zipX64 -DestinationPath $prebuiltDir -Force
