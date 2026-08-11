@@ -65,7 +65,7 @@ dependencies:
   package_info_plus: ^9.0.1
   ota_update: ^7.1.0
   supabase_flutter: ^2.16.0
-  libtorrent_flutter: ^1.9.2
+  libtorrent_flutter: 1.8.4
 
 dev_dependencies:
   flutter_test:
