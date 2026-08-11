@@ -846,14 +846,20 @@ class DownloadManager {
           if (isAudiobookBay) {
             final activeDebrid = await DebridApi().getActiveDebridService();
             if (activeDebrid != null && activeDebrid.isNotEmpty) {
-              final files = await DebridApi().resolveByService(
-                activeDebrid,
-                rawUrl,
-                fileIndex: fileIndex,
-                filename: track.title,
-              );
-              if (files.isNotEmpty && files.first.downloadUrl.isNotEmpty) {
-                url = files.first.downloadUrl;
+              try {
+                final files = await DebridApi().resolveByService(
+                  activeDebrid,
+                  rawUrl,
+                  fileIndex: fileIndex,
+                  filename: track.title,
+                );
+                if (files.isNotEmpty && files.first.downloadUrl.isNotEmpty) {
+                  url = files.first.downloadUrl;
+                } else {
+                  throw Exception('Torrent is not cached or ready on $activeDebrid yet.');
+                }
+              } catch (e) {
+                throw Exception('Debrid ($activeDebrid): Audiobook is not cached or ready yet. ($e)');
               }
             }
           }

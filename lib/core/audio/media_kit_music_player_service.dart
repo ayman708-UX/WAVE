@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
+import '../../main.dart' show scaffoldMessengerKey;
 import '../../features/audiobooks/services/torrent_stream_service.dart';
 import '../api/debrid_api.dart';
 import '../api/deezer_api_client.dart';
@@ -554,15 +556,11 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       Map<String, String>? customHeaders;
 
       if (track.link == 'wave://audiobook' && track.preview != null) {
-        try {
-          final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
-          url = await _resolveAudiobookTrackUrl(track, payload);
-          final headersMap = payload['httpHeaders'];
-          if (headersMap is Map) {
-            customHeaders = Map<String, String>.from(headersMap);
-          }
-        } catch (e) {
-          appLogger.e('Failed to parse audiobook track payload: $e');
+        final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
+        url = await _resolveAudiobookTrackUrl(track, payload);
+        final headersMap = payload['httpHeaders'];
+        if (headersMap is Map) {
+          customHeaders = Map<String, String>.from(headersMap);
         }
       } else {
         final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
@@ -688,6 +686,34 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     });
   }
 
+  void _showErrorUiToast(String message) {
+    try {
+      final clean = message.replaceAll('Exception: ', '').trim();
+      scaffoldMessengerKey.currentState?.clearSnackBars();
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.cloud_off_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  clean,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFC93B3B),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    } catch (_) {}
+  }
+
   Future<String?> _resolveAudiobookTrackUrl(DeezerTrack track, Map<String, dynamic> payload) async {
     final rawUrl = payload['url'] as String;
     final isTorrent = payload['isTorrent'] == true;
@@ -703,31 +729,37 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         source == 'abb' ||
         rawUrl.startsWith('magnet:');
 
-    if (isAudiobookBay) {
-      final activeDebrid = await DebridApi().getActiveDebridService();
-      if (activeDebrid != null && activeDebrid.isNotEmpty) {
-        appLogger.i('[Debrid] Resolving AudiobookBay magnet via active service ($activeDebrid)...');
-        try {
-          final files = await DebridApi().resolveByService(
-            activeDebrid,
-            rawUrl,
-            fileIndex: fileIndex,
-            filename: track.title,
-          );
-          if (files.isNotEmpty && files.first.downloadUrl.isNotEmpty) {
-            final debridUrl = files.first.downloadUrl;
-            appLogger.i('[Debrid] Successfully resolved stream URL via $activeDebrid: $debridUrl');
-            return debridUrl;
-          }
-        } catch (e) {
-          appLogger.e('[Debrid] Resolution via $activeDebrid failed: $e. Falling back to libtorrent...');
+    final activeDebrid = await DebridApi().getActiveDebridService();
+    if (activeDebrid != null && activeDebrid.isNotEmpty && isAudiobookBay) {
+      appLogger.i('[Debrid] Resolving Audiobook magnet via active Debrid service ($activeDebrid)...');
+      try {
+        final files = await DebridApi().resolveByService(
+          activeDebrid,
+          rawUrl,
+          fileIndex: fileIndex,
+          filename: track.title,
+        );
+        if (files.isNotEmpty && files.first.downloadUrl.isNotEmpty) {
+          final debridUrl = files.first.downloadUrl;
+          appLogger.i('[Debrid] Successfully resolved stream URL via $activeDebrid: $debridUrl');
+          return debridUrl;
         }
-      } else {
-        appLogger.i('[Debrid] No active Debrid service key found.');
+        throw Exception('Audiobook is not cached on $activeDebrid yet.');
+      } catch (e) {
+        appLogger.e('[Debrid] Debrid resolution failed on $activeDebrid: $e');
+        final rawStr = e.toString().replaceAll('Exception: ', '').trim();
+        if (rawStr.contains('returned no files') || rawStr.contains('never returned') || rawStr.contains('not cached')) {
+          throw Exception('Audiobook is not cached on $activeDebrid yet. Please wait for it to cache.');
+        } else if (rawStr.contains('timed out')) {
+          throw Exception('$activeDebrid caching timed out. Audiobook is still downloading on $activeDebrid.');
+        } else {
+          throw Exception('Debrid ($activeDebrid): $rawStr');
+        }
       }
     }
 
-    appLogger.i('[TorrentStream] Falling back to libtorrent engine for Audiobook track: ${track.title}');
+    // Only if Debrid is OFF (no active Debrid service configured), use local P2P engine.
+    appLogger.i('[TorrentStream] Debrid is OFF. Streaming via local libtorrent engine: ${track.title}');
     return await TorrentStreamService.instance.getStreamUrl(rawUrl, fileIndex ?? 0);
   }
 
@@ -760,15 +792,11 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       Map<String, String>? customHeaders;
 
       if (track.link == 'wave://audiobook' && track.preview != null) {
-        try {
-          final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
-          url = await _resolveAudiobookTrackUrl(track, payload);
-          final headersMap = payload['httpHeaders'];
-          if (headersMap is Map) {
-            customHeaders = Map<String, String>.from(headersMap);
-          }
-        } catch (e) {
-          appLogger.e('Failed to parse audiobook track payload: $e');
+        final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
+        url = await _resolveAudiobookTrackUrl(track, payload);
+        final headersMap = payload['httpHeaders'];
+        if (headersMap is Map) {
+          customHeaders = Map<String, String>.from(headersMap);
         }
       } else {
         final localPath = LocalDownloadMatcher.localAudioPathForTrack(track);
@@ -813,15 +841,12 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
       if (url == null) {
         _setLoadingForOp(op, false);
-        if (_queue.upcoming.isNotEmpty) {
-          appLogger.w('No audio source found for ${track.title}; skipping');
-          unawaited(skipNext());
-          return;
-        }
+        const errMsg = 'No audio source found';
+        _showErrorUiToast(errMsg);
         _emitPlayer(
           _state.copyWith(
             status: PlaybackStatus.error,
-            errorMessage: 'No audio source found',
+            errorMessage: errMsg,
           ),
         );
         return;
@@ -864,6 +889,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       if (_isStalePlaybackOp(op)) return;
       appLogger.e('YouTube rate limit blocked playback: $e');
       await _resetAudioPipeline(reason: 'YouTube rate limit');
+      _showErrorUiToast(e.message);
       _emitPlayer(
         _state.copyWith(status: PlaybackStatus.error, errorMessage: e.message),
       );
@@ -873,14 +899,12 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       if (_isStalePlaybackOp(op)) return;
       appLogger.e('media_kit load failed', error: e, stackTrace: st);
       await _resetAudioPipeline(reason: 'track load failed');
-      if (_queue.upcoming.isNotEmpty) {
-        unawaited(skipNext());
-        return;
-      }
+      final cleanMessage = e.toString().replaceAll('Exception: ', '').trim();
+      _showErrorUiToast(cleanMessage);
       _emitPlayer(
         _state.copyWith(
           status: PlaybackStatus.error,
-          errorMessage: e.toString(),
+          errorMessage: cleanMessage,
         ),
       );
     }
