@@ -35,18 +35,25 @@ jobs:
 
       - run: flutter pub get
 
-      - name: Dereference libtorrent_flutter symlink to real directory
+      - name: Pre-extract libtorrent_flutter binaries in pub cache
         shell: pwsh
         run: |
-          $symlink = "windows\flutter\ephemeral\.plugin_symlinks\libtorrent_flutter"
-          if (Test-Path $symlink) {
-            $item = Get-Item $symlink
-            if ($item.LinkType) {
-              $target = $item.Target
-              Write-Host "Converting symlink $symlink (target: $target) to real directory..."
-              Remove-Item $symlink -Force -Recurse
-              Copy-Item -Path $target -Destination $symlink -Recurse -Force
-            }
+          $pubCache = "$env:PUB_CACHE"
+          if ([string]::IsNullOrEmpty($pubCache)) { $pubCache = "$env:LocalAppData\Pub\Cache" }
+          $pkgDir = Get-ChildItem -Path "$pubCache\hosted\pub.dev" -Filter "libtorrent_flutter-*" | Select-Object -First 1
+          if ($pkgDir) {
+            Write-Host "Found libtorrent_flutter in pub cache at: $($pkgDir.FullName)"
+            $prebuiltDir = Join-Path $pkgDir.FullName "prebuilt\windows"
+            New-Item -ItemType Directory -Force -Path $prebuiltDir
+            
+            $urlX64 = "https://github.com/nabil20040/libtorrent_flutter/releases/download/v1.8.4/windows-native-lib-x64.zip"
+            $zipX64 = Join-Path $prebuiltDir "x64.zip"
+            Invoke-WebRequest -Uri $urlX64 -OutFile $zipX64
+            Expand-Archive -Path $zipX64 -DestinationPath $prebuiltDir -Force
+            Remove-Item $zipX64 -Force
+            Write-Host "Prebuilt Windows native binaries extracted successfully."
+          } else {
+            Write-Host "libtorrent_flutter package directory not found in pub cache."
           }
 
       - run: flutter build windows --release
