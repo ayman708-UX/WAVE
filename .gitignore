@@ -47,3 +47,5 @@ app.*.map.json
 # Environment variables
 .env
 
+monochrome-main/
+

@@ -392,6 +392,85 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
     }
   }
 
+  void _saveAudiobookProgress({bool force = false, Duration? customPosition}) {
+    final currentTrack = _queue.current;
+    if (currentTrack == null || currentTrack.link != 'wave://audiobook' || currentTrack.preview == null) {
+      return;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (!force && (now - _lastAudiobookSaveTime < 5000)) {
+      return;
+    }
+    _lastAudiobookSaveTime = now;
+
+    try {
+      final payload = (jsonDecode(currentTrack.preview!) as Map).cast<String, dynamic>();
+      final bookData = payload['audiobook'];
+      if (bookData is! Map) return;
+
+      final book = Audiobook.fromJson(Map<String, dynamic>.from(bookData));
+      final chapterIndex = (payload['chapterIndex'] as num?)?.toInt() ?? 0;
+      final pos = customPosition ?? _state.position;
+      final posSeconds = pos.inSeconds;
+
+      if (!Hive.isBoxOpen(HiveBoxes.audiobookProgress)) return;
+      final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
+
+      final progress = AudiobookProgress(
+        audiobook: book,
+        chapterIndex: chapterIndex,
+        positionSeconds: posSeconds,
+        updatedAt: now,
+      );
+
+      box.put(
+        book.uuid,
+        jsonDecode(jsonEncode(progress.toJson())),
+      );
+      SupabaseAudiobookSync().syncProgress(progress);
+    } catch (e) {
+      appLogger.w('Failed to save audiobook progress: $e');
+    }
+  }
+
+  Duration? _resolveAudiobookStartPosition(DeezerTrack track, Duration? requestedStartPosition) {
+    if (track.link != 'wave://audiobook' || track.preview == null) {
+      return requestedStartPosition;
+    }
+
+    if (requestedStartPosition != null && requestedStartPosition > Duration.zero) {
+      return requestedStartPosition;
+    }
+
+    try {
+      final payload = (jsonDecode(track.preview!) as Map).cast<String, dynamic>();
+      final bookData = payload['audiobook'];
+      if (bookData is! Map) return null;
+
+      final book = Audiobook.fromJson(Map<String, dynamic>.from(bookData));
+      final chapterIndex = (payload['chapterIndex'] as num?)?.toInt() ?? 0;
+
+      if (Hive.isBoxOpen(HiveBoxes.audiobookProgress)) {
+        final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
+        final raw = box.get(book.uuid);
+        if (raw is Map) {
+          final progress = AudiobookProgress.fromJson(
+            Map<String, dynamic>.from(raw),
+          );
+          if (progress.chapterIndex == chapterIndex && progress.positionSeconds > 0) {
+            final start = Duration(seconds: progress.positionSeconds);
+            appLogger.i('Autoseeking audiobook "${book.title}" Chapter $chapterIndex to ${start.inSeconds}s');
+            return start;
+          }
+        }
+      }
+    } catch (e) {
+      appLogger.w('Failed to resolve audiobook start position: $e');
+    }
+    return null;
+  }
+
   void _onPositionChanged(mk.Player p, Duration pos) {
     if (p != _activePlayer) return;
     if (pos == _state.position) return;
@@ -399,28 +478,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
     final currentTrack = _queue.current;
     if (currentTrack != null && currentTrack.link == 'wave://audiobook') {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (now - _lastAudiobookSaveTime > 5000 && currentTrack.preview != null) {
-        _lastAudiobookSaveTime = now;
-        try {
-          final payload = jsonDecode(currentTrack.preview!);
-          final book = Audiobook.fromJson(payload['audiobook']);
-          final chapterIndex = payload['chapterIndex'] as int;
-          
-          final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
-          final progress = AudiobookProgress(
-            audiobook: book,
-            chapterIndex: chapterIndex,
-            positionSeconds: pos.inSeconds,
-            updatedAt: now,
-          );
-          box.put(
-            book.uuid,
-            jsonDecode(jsonEncode(progress.toJson())),
-          );
-          SupabaseAudiobookSync().syncProgress(progress);
-        } catch (_) {}
-      }
+      _saveAudiobookProgress(customPosition: pos);
     }
 
     // Check for automatic crossfade
@@ -599,8 +657,17 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       if (userAgent != null) mergedHeaders['User-Agent'] = userAgent;
       if (customHeaders != null) mergedHeaders.addAll(customHeaders);
 
+      final effectiveStartPosition = _resolveAudiobookStartPosition(track, null);
+
       await fadingInPlayer
-          .open(mk.Media(url, httpHeaders: mergedHeaders.isNotEmpty ? mergedHeaders : null), play: true)
+          .open(
+            mk.Media(
+              url,
+              start: effectiveStartPosition,
+              httpHeaders: mergedHeaders.isNotEmpty ? mergedHeaders : null,
+            ),
+            play: true,
+          )
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
@@ -609,6 +676,9 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
         const Duration(seconds: 5),
         onTimeout: () {},
       );
+      if (effectiveStartPosition != null && effectiveStartPosition > Duration.zero) {
+        await fadingInPlayer.seek(effectiveStartPosition);
+      }
       if (_isStalePlaybackOp(op)) {
         await fadingInPlayer.stop();
         return;
@@ -864,15 +934,24 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
       if (userAgent != null) mergedHeaders['User-Agent'] = userAgent;
       if (customHeaders != null) mergedHeaders.addAll(customHeaders);
 
+      final effectiveStartPosition = _resolveAudiobookStartPosition(track, startPosition);
+
       await player
-          .open(mk.Media(url, httpHeaders: mergedHeaders.isNotEmpty ? mergedHeaders : null), play: true)
+          .open(
+            mk.Media(
+              url,
+              start: effectiveStartPosition,
+              httpHeaders: mergedHeaders.isNotEmpty ? mergedHeaders : null,
+            ),
+            play: true,
+          )
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () => throw TimeoutException('Player open timed out'),
           );
       await player.play().timeout(const Duration(seconds: 5), onTimeout: () {});
-      if (startPosition != null && startPosition > Duration.zero) {
-        await player.seek(startPosition);
+      if (effectiveStartPosition != null && effectiveStartPosition > Duration.zero) {
+        await player.seek(effectiveStartPosition);
       }
       
       if (_isStalePlaybackOp(op)) {
@@ -949,6 +1028,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   @override
   Future<void> pause() async {
+    _saveAudiobookProgress(force: true);
     if (_loading || _state.status == PlaybackStatus.loading) {
       await stop();
       return;
@@ -960,6 +1040,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   @override
   Future<void> stop() async {
+    _saveAudiobookProgress(force: true);
     _nextPlaybackOp();
     _cancelTransitions();
     _cancelLoadingWatchdog();
@@ -973,7 +1054,11 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
   }
 
   @override
-  Future<void> seek(Duration position) => _activePlayer.seek(position);
+  Future<void> seek(Duration position) async {
+    await _activePlayer.seek(position);
+    _emitPlayer(_state.copyWith(position: position));
+    _saveAudiobookProgress(force: true, customPosition: position);
+  }
 
   @override
   Future<void> skipToNext() async => skipNext();
@@ -1302,6 +1387,7 @@ class MediaKitMusicPlayerService extends BaseAudioHandler
 
   @override
   Future<void> dispose() async {
+    _saveAudiobookProgress(force: true);
     _crossfadeTimer?.cancel();
     _cancelLoadingWatchdog();
     await _playerA.dispose();

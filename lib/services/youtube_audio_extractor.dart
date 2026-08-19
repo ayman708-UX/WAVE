@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -30,8 +29,6 @@ class YoutubeAudioExtractor {
 
   static const Duration _configTtl = Duration(hours: 3);
   static const Duration _requestTimeout = Duration(seconds: 10);
-  // Keep playback responsive. A dead candidate must not make the app feel frozen.
-  static const Duration _candidateResolveTimeout = Duration(seconds: 8);
   static const int _maxVideoCandidates = 2;
 
   static const String _desktopUserAgent = YoutubeStreamHttp.desktopUserAgent;
@@ -51,117 +48,58 @@ class YoutubeAudioExtractor {
     },
   );
 
-  // ---------------------------------------------------------------------------
-  // InnerTube client definitions
-  //
-  // Order matters: clients that tend to return plain URLs and work across
-  // more regions are tried first.
-  // ---------------------------------------------------------------------------
   static final List<_YtClient> _clients = [
-    // TVHTML5_SIMPLY_EMBEDDED_PLAYER is very reliable for plain audio URLs
-    // and bypasses many age-restriction / bot checks.
-    _YtClient(
-      key: 'tv_embedded',
-      id: '85',
-      version: '2.0',
-      userAgent:
-          'Mozilla/5.0 (PlayStation; PlayStation 4/12.00) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-      context: {
-        'clientName': 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-        'clientVersion': '2.0',
-        'clientScreen': 'EMBED',
-        'hl': 'en',
-        'gl': 'US',
-        'platform': 'TV',
-      },
-      // This client needs the third-party embed context to look legitimate.
-      thirdParty: const _ThirdParty(embedUrl: 'https://www.youtube.com'),
-    ),
-    // TVHTML5 is another TV client that often returns usable streams.
-    _YtClient(
-      key: 'tvhtml5',
-      id: '7',
-      version: '7.20250219.14.00',
-      userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-      context: {
-        'clientName': 'TVHTML5',
-        'clientVersion': '7.20250219.14.00',
-        'hl': 'en',
-        'gl': 'US',
-        'platform': 'TV',
-      },
-    ),
-    // Android VR client historically returns high-quality audio URLs.
-    _YtClient(
-      key: 'android_vr',
-      id: '28',
-      version: '1.60.19',
-      userAgent:
-          'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 14; en_US; Quest 3; Build/UQ1A.240105.004) gzip',
-      context: {
-        'clientName': 'ANDROID_VR',
-        'clientVersion': '1.60.19',
-        'deviceMake': 'Oculus',
-        'deviceModel': 'Quest 3',
-        'osName': 'Android',
-        'osVersion': '14',
-        'platform': 'MOBILE',
-        'androidSdkVersion': 34,
-        'hl': 'en',
-        'gl': 'US',
-      },
-      requiresVisitorData: true,
-    ),
-    // Modern Android client.
-    _YtClient(
-      key: 'android',
-      id: '3',
-      version: '19.44.38',
-      userAgent:
-          'com.google.android.youtube/19.44.38 (Linux; U; Android 14; en_US) gzip',
-      context: {
-        'clientName': 'ANDROID',
-        'clientVersion': '19.44.38',
-        'osName': 'Android',
-        'osVersion': '14',
-        'platform': 'MOBILE',
-        'androidSdkVersion': 34,
-        'hl': 'en',
-        'gl': 'US',
-      },
-    ),
-    // iOS client.
+    // iOS 20.10.4 client - returns plain audio URLs without signature cipher.
     _YtClient(
       key: 'ios',
       id: '5',
-      version: '19.45.4',
+      version: '20.10.4',
       userAgent:
-          'com.google.ios.youtube/19.45.4 (iPhone17,1; U; CPU iOS 18_1 like Mac OS X)',
+          'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X;)',
       context: {
         'clientName': 'IOS',
-        'clientVersion': '19.45.4',
-        'deviceModel': 'iPhone17,1',
-        'osName': 'iPhone',
-        'osVersion': '18.1.0.22B83',
+        'clientVersion': '20.10.4',
+        'deviceMake': 'Apple',
+        'deviceModel': 'iPhone16,2',
+        'userAgent':
+            'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X;)',
         'platform': 'MOBILE',
+        'osName': 'IOS',
+        'osVersion': '18.1.0.22B83',
         'hl': 'en',
         'gl': 'US',
       },
     ),
-    // Mobile web as a last resort.
+    // Android 20.10.38 sdkless client.
+    _YtClient(
+      key: 'android',
+      id: '3',
+      version: '20.10.38',
+      userAgent:
+          'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
+      context: {
+        'clientName': 'ANDROID',
+        'clientVersion': '20.10.38',
+        'userAgent':
+            'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
+        'platform': 'MOBILE',
+        'osName': 'Android',
+        'osVersion': '11',
+        'hl': 'en',
+        'gl': 'US',
+      },
+    ),
+    // Mobile web fallback.
     _YtClient(
       key: 'mweb',
       id: '2',
-      version: '2.20250217.03.00',
+      version: '2.20260817.01.00',
       userAgent:
           'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 '
           '(KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36',
       context: {
         'clientName': 'MWEB',
-        'clientVersion': '2.20250217.03.00',
+        'clientVersion': '2.20260817.01.00',
         'hl': 'en',
         'gl': 'US',
         'platform': 'MOBILE',
@@ -297,27 +235,11 @@ class YoutubeAudioExtractor {
     }
 
     final config = await _ensureConfig();
-    final result = await _tryClients(
+    return await _tryClients(
       config,
       videoId,
       verifyStream: verifyStream,
     );
-    if (result != null) return result;
-
-    // One retry with a forced config refresh (visitor_data / api key may have
-    // rotated, or the account/IP may have been temporarily challenged).
-    if (!_isForced(config)) {
-      _config = null;
-      final fresh = await _ensureConfig(forceRefresh: true);
-      final result2 = await _tryClients(
-        fresh,
-        videoId,
-        verifyStream: verifyStream,
-      );
-      if (result2 != null) return result2;
-    }
-
-    return null;
   }
 
   Future<({String videoId, String audioUrl, String userAgent})?> extract(
@@ -333,10 +255,10 @@ class YoutubeAudioExtractor {
       targetDuration: targetDuration,
       titleVersion: titleVersion,
     );
-    for (final id in ids.take(_maxVideoCandidates)) {
+    for (final id in ids.take(1)) {
       try {
         final res = await getAudioUrl(id, verifyStream: verifyStream).timeout(
-          _candidateResolveTimeout,
+          const Duration(seconds: 4),
           onTimeout: () {
             _log('candidate $id timed out');
             return null;
@@ -680,15 +602,14 @@ class YoutubeAudioExtractor {
             _log('${client.key}: skipped expired stream URL');
             continue;
           }
-          if (verifyStream) {
-            final playable = await YoutubeStreamHttp.probe(
-              best.url,
-              userAgent: client.userAgent,
-            );
-            if (!playable) {
-              _log('${client.key}: stream probe rejected ${best.label}');
-              continue;
-            }
+          final playable = await YoutubeStreamHttp.probe(
+            best.url,
+            userAgent: client.userAgent,
+            timeout: const Duration(milliseconds: 1500),
+          );
+          if (!playable) {
+            _log('${client.key}: stream probe rejected ${best.label}');
+            continue;
           }
           _streamCache[videoId] = _CachedStream(
             best.url,
@@ -706,15 +627,10 @@ class YoutubeAudioExtractor {
   }
 
   List<_YtClient> _clientsForRuntime() {
-    if (!Platform.isAndroid) return _clients.toList();
-
     const preferred = <String>[
-      'android',
-      'android_vr',
-      'mweb',
       'ios',
-      'tv_embedded',
-      'tvhtml5',
+      'android',
+      'mweb',
     ];
 
     final ordered = <_YtClient>[];
@@ -755,10 +671,6 @@ class YoutubeAudioExtractor {
     final headers = _commonHeaders(config, client);
 
     final context = <String, dynamic>{'client': client.context};
-
-    if (client.thirdParty != null) {
-      context['thirdParty'] = {'embedUrl': client.thirdParty!.embedUrl};
-    }
 
     final body = jsonEncode({
       'videoId': videoId,
@@ -1004,11 +916,6 @@ class YoutubeAudioExtractor {
 
 // --- private types -----------------------------------------------------------
 
-class _ThirdParty {
-  final String embedUrl;
-  const _ThirdParty({required this.embedUrl});
-}
-
 class _YtClient {
   final String key;
   final String id;
@@ -1016,7 +923,6 @@ class _YtClient {
   final String userAgent;
   final Map<String, Object> context;
   final bool requiresVisitorData;
-  final _ThirdParty? thirdParty;
 
   _YtClient({
     required this.key,
@@ -1025,7 +931,6 @@ class _YtClient {
     required this.userAgent,
     required this.context,
     this.requiresVisitorData = false,
-    this.thirdParty,
   });
 }
 

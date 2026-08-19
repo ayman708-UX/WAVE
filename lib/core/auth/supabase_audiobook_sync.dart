@@ -67,6 +67,51 @@ class SupabaseAudiobookSync {
     }
   }
 
+  RealtimeChannel? _realtimeChannel;
+
+  /// Subscribe to real-time changes in audiobook_progress table on Supabase.
+  void subscribeToRealtime({required void Function(AudiobookProgress) onUpdate}) {
+    if (!_isSignedIn || _userId == null) return;
+    try {
+      _realtimeChannel?.unsubscribe();
+      _realtimeChannel = _client
+          .channel('public:audiobook_progress:$_userId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'audiobook_progress',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: _userId!,
+            ),
+            callback: (payload) {
+              try {
+                final newRecord = payload.newRecord;
+                if (newRecord.isNotEmpty) {
+                  final progress = AudiobookProgress.fromJson(
+                    Map<String, dynamic>.from(newRecord),
+                  );
+                  onUpdate(progress);
+                }
+              } catch (e) {
+                appLogger.w('Realtime audiobook progress parse error: $e');
+              }
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      appLogger.e('Failed to subscribe to realtime audiobook progress: $e');
+    }
+  }
+
+  void unsubscribeRealtime() {
+    try {
+      _realtimeChannel?.unsubscribe();
+      _realtimeChannel = null;
+    } catch (_) {}
+  }
+
   /// Bulk sync local audiobooks and progress upwards to Supabase.
   Future<void> syncAllAudiobooks({
     required List<Audiobook> books,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
@@ -75,21 +76,79 @@ final likedAudiobooksProvider =
 // ---------------------------------------------------------------------------
 
 class AudiobookProgressNotifier extends Notifier<List<AudiobookProgress>> {
+  StreamSubscription<BoxEvent>? _sub;
+
   @override
   List<AudiobookProgress> build() {
+    ref.onDispose(() {
+      _sub?.cancel();
+      ref.read(supabaseAudiobookSyncProvider).unsubscribeRealtime();
+    });
+
+    if (Hive.isBoxOpen(HiveBoxes.audiobookProgress)) {
+      final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
+      _sub?.cancel();
+      _sub = box.watch().listen((_) {
+        state = _loadFromBox();
+      });
+    }
+
+    final sync = ref.read(supabaseAudiobookSyncProvider);
+    sync.subscribeToRealtime(
+      onUpdate: (remoteProgress) async {
+        if (!Hive.isBoxOpen(HiveBoxes.audiobookProgress)) return;
+        final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
+        final existingRaw = box.get(remoteProgress.audiobook.uuid);
+        if (existingRaw is Map) {
+          final local = AudiobookProgress.fromJson(
+            _deepJson(Map<String, dynamic>.from(existingRaw)),
+          );
+          if (remoteProgress.updatedAt >= local.updatedAt) {
+            await box.put(
+              remoteProgress.audiobook.uuid,
+              _deepJson(remoteProgress.toJson()),
+            );
+            state = _loadFromBox();
+          }
+        } else {
+          await box.put(
+            remoteProgress.audiobook.uuid,
+            _deepJson(remoteProgress.toJson()),
+          );
+          state = _loadFromBox();
+        }
+      },
+    );
+
+    return _loadFromBox();
+  }
+
+  List<AudiobookProgress> _loadFromBox() {
+    if (!Hive.isBoxOpen(HiveBoxes.audiobookProgress)) return const [];
     final box = Hive.box<dynamic>(HiveBoxes.audiobookProgress);
-    return box.values
+    final list = box.values
         .whereType<Map>()
         .map((m) => AudiobookProgress.fromJson(_deepJson(Map<String, dynamic>.from(m))))
-        .toList(growable: false);
+        .toList();
+    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return list;
   }
 
   AudiobookProgress? getProgress(String uuid) {
     try {
       return state.firstWhere((p) => p.audiobook.uuid == uuid);
-    } catch (_) {
-      return null;
-    }
+    } catch (_) {}
+    try {
+      if (Hive.isBoxOpen(HiveBoxes.audiobookProgress)) {
+        final raw = Hive.box<dynamic>(HiveBoxes.audiobookProgress).get(uuid);
+        if (raw is Map) {
+          return AudiobookProgress.fromJson(
+            _deepJson(Map<String, dynamic>.from(raw)),
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> updateProgress(Audiobook book, int chapterIndex, int positionSeconds) async {

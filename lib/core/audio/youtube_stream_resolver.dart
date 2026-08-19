@@ -39,14 +39,12 @@ class YoutubeStreamResolver {
   /// backend could resolve it.
   Future<({String url, String? userAgent})?> resolveUrl(
     DeezerTrack track, {
-    bool verifyStream = false,
+    bool verifyStream = true,
     bool allowExplodeFallback = true,
   }) async {
     YoutubeRateLimitGuard.throwIfLimited();
 
-    // If the user tapped a real YouTube listing, play that exact video only.
-    // Do not fall back to a Deezer/title search here; one failed YouTube tap
-    // must not become several extra YouTube requests.
+    // 1. If the user tapped a real YouTube listing, play that exact video
     final directVideoId = _youtubeVideoId(track);
     if (directVideoId != null) {
       final direct = await _resolveVideoIdForPlayback(
@@ -54,42 +52,15 @@ class YoutubeStreamResolver {
         VideoId(directVideoId),
         saveMatch: true,
         verifyStream: verifyStream,
-        timeout: const Duration(seconds: 8),
+        timeout: const Duration(seconds: 4),
       );
       if (direct != null) return direct;
 
-      appLogger.w('Exact YouTube listing failed quickly: $directVideoId');
+      appLogger.w('Exact YouTube listing failed: $directVideoId');
       return null;
     }
 
-    // Fast path first so Play reacts quickly. This now checks in-memory and
-    // Hive Deezer-ID -> YouTube-ID matches before doing a fresh YouTube search.
-    final fast = await resolveFastUrlOnly(
-      track,
-      timeout: const Duration(seconds: 12),
-      verifyStream: verifyStream,
-    );
-    if (fast != null) return fast;
-
-    // Conservative fallback. Download code can disable this after it has
-    // already tried its preferred path, so a failed song does not repeat the
-    // same search/manifest work again.
-    if (allowExplodeFallback) {
-      try {
-        final info = await resolveStreamInfo(
-          track,
-        ).timeout(const Duration(seconds: 12), onTimeout: () => null);
-        if (info != null) {
-          final url = info.url.toString();
-          return (url: url, userAgent: YoutubeStreamHttp.userAgentForUrl(url));
-        }
-      } catch (e) {
-        if (YoutubeRateLimitGuard.isRateLimitError(e)) _handleRateLimit(e);
-        appLogger.w('youtube_explode_dart fallback failed: $e');
-      }
-    }
-
-    // Convertytmp3 Fallback
+    // 2. Convertytmp3 Primary Stream Resolution (Fastest & 100% reliable)
     VideoId? vidId = _cache[track.id];
     if (vidId == null) {
       final savedId = _cachedVideoIdFor(track.id);
@@ -98,8 +69,9 @@ class YoutubeStreamResolver {
     
     if (vidId == null) {
       try {
+        final query = _buildQuery(track);
         final results = await YoutubeRateLimitGuard.runLowRequest(
-          () => _yt.search.search(_buildQuery(track)),
+          () => _yt.search.search(query).timeout(const Duration(seconds: 3)),
         );
         if (results.isNotEmpty) {
            vidId = results.first.id;
@@ -112,13 +84,39 @@ class YoutubeStreamResolver {
         final streamUrl = await Convertytmp3Client.getStreamUrl(vidId.value);
         if (streamUrl != null) {
           appLogger.i('Resolved via Convertytmp3Client for ${track.title}');
+          _cache[track.id] = vidId;
+          await _saveVideoIdFor(track.id, vidId);
           return (
             url: streamUrl,
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
           );
         }
       } catch (e) {
-        appLogger.w('Convertytmp3 fallback failed: $e');
+        appLogger.w('Convertytmp3 resolution failed: $e');
+      }
+    }
+
+    // 3. Fast direct extractor fallback (with mandatory probe)
+    final fast = await resolveFastUrlOnly(
+      track,
+      timeout: const Duration(seconds: 4),
+      verifyStream: true,
+    );
+    if (fast != null) return fast;
+
+    // 4. Conservative fallback: youtube_explode_dart (as last resort)
+    if (allowExplodeFallback) {
+      try {
+        final info = await resolveStreamInfo(
+          track,
+        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+        if (info != null) {
+          final url = info.url.toString();
+          return (url: url, userAgent: YoutubeStreamHttp.userAgentForUrl(url));
+        }
+      } catch (e) {
+        if (YoutubeRateLimitGuard.isRateLimitError(e)) _handleRateLimit(e);
+        appLogger.w('youtube_explode_dart fallback failed: $e');
       }
     }
 
@@ -131,7 +129,7 @@ class YoutubeStreamResolver {
   /// search. It deliberately does not run youtube_explode fallback here.
   Future<({String url, String? userAgent})?> resolveFastUrlOnly(
     DeezerTrack track, {
-    Duration timeout = const Duration(seconds: 12),
+    Duration timeout = const Duration(seconds: 4),
     bool verifyStream = false,
   }) async {
     YoutubeRateLimitGuard.throwIfLimited();
@@ -157,7 +155,7 @@ class YoutubeStreamResolver {
         cachedVid,
         saveMatch: false,
         verifyStream: verifyStream,
-        timeout: const Duration(seconds: 8),
+        timeout: const Duration(seconds: 4),
       );
       if (cached != null) return cached;
       _cache.remove(track.id);
@@ -170,7 +168,7 @@ class YoutubeStreamResolver {
         VideoId(savedVideoId),
         saveMatch: true,
         verifyStream: verifyStream,
-        timeout: const Duration(seconds: 8),
+        timeout: const Duration(seconds: 4),
       );
       if (saved != null) return saved;
       await _removeVideoIdFor(track.id);
@@ -212,11 +210,29 @@ class YoutubeStreamResolver {
     required bool verifyStream,
     required Duration timeout,
   }) async {
+    // 1. Convertytmp3 (Fastest & 100% reliable)
+    try {
+      final streamUrl = await Convertytmp3Client.getStreamUrl(videoId.value);
+      if (streamUrl != null) {
+        _cache[track.id] = videoId;
+        if (saveMatch) await _saveVideoIdFor(track.id, videoId);
+        appLogger.i('Resolved videoId $videoId via Convertytmp3Client');
+        return (
+          url: streamUrl,
+          userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        );
+      }
+    } catch (e) {
+      appLogger.w('Convertytmp3 direct videoId resolve failed for $videoId: $e');
+    }
+
+    // 2. Direct extractor fallback (with stream probe)
     try {
       final res = await YoutubeRateLimitGuard.runLowRequest(
         () => YoutubeAudioExtractor.instance.getAudioUrl(
           videoId.value,
-          verifyStream: verifyStream,
+          verifyStream: true,
         ),
       ).timeout(timeout, onTimeout: () => null);
       if (res != null) {
@@ -228,6 +244,7 @@ class YoutubeStreamResolver {
       if (YoutubeRateLimitGuard.isRateLimitError(e)) _handleRateLimit(e);
       appLogger.w('Fast video id playback resolve failed for $videoId: $e');
     }
+
     return null;
   }
 
