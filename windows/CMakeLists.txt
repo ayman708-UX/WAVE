@@ -55,26 +55,6 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
-
-# Pre-extract libtorrent_flutter binaries to realpath to bypass CMake symlink extraction bug on CI
-set(_LTF_SYM "${FLUTTER_MANAGED_DIR}/ephemeral/.plugin_symlinks/libtorrent_flutter")
-if(EXISTS "${_LTF_SYM}")
-  get_filename_component(_LTF_REAL "${_LTF_SYM}" REALPATH)
-  set(_LTF_PREBUILT "${_LTF_REAL}/prebuilt/windows")
-  set(_LTF_DLL "${_LTF_PREBUILT}/x64/libtorrent_flutter.dll")
-  if(NOT EXISTS "${_LTF_DLL}")
-    message(STATUS "Pre-extracting libtorrent_flutter binaries to realpath...")
-    set(_LTF_ZIP "${CMAKE_CURRENT_BINARY_DIR}/windows-native-lib-x64.zip")
-    file(DOWNLOAD "https://github.com/ayman708-UX/libtorrent_flutter/releases/download/v1.9.2/windows-native-lib-x64.zip" "${_LTF_ZIP}" SHOW_PROGRESS STATUS _DL_STAT TLS_VERIFY ON)
-    list(GET _DL_STAT 0 _DL_CODE)
-    if(_DL_CODE EQUAL 0)
-      file(MAKE_DIRECTORY "${_LTF_PREBUILT}")
-      file(ARCHIVE_EXTRACT INPUT "${_LTF_ZIP}" DESTINATION "${_LTF_PREBUILT}")
-      file(REMOVE "${_LTF_ZIP}")
-    endif()
-  endif()
-endif()
-
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)

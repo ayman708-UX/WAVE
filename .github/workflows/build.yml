@@ -35,26 +35,9 @@ jobs:
 
       - run: flutter pub get
 
-      - name: Pre-extract libtorrent_flutter binaries in pub cache
+      - name: Setup libtorrent_flutter Windows native binaries
         shell: pwsh
-        run: |
-          $pubCache = "$env:PUB_CACHE"
-          if ([string]::IsNullOrEmpty($pubCache)) { $pubCache = "$env:LocalAppData\Pub\Cache" }
-          $pkgDir = Get-ChildItem -Path "$pubCache\hosted\pub.dev" -Filter "libtorrent_flutter-*" | Select-Object -First 1
-          if ($pkgDir) {
-            Write-Host "Found libtorrent_flutter in pub cache at: $($pkgDir.FullName)"
-            $prebuiltDir = Join-Path $pkgDir.FullName "prebuilt\windows"
-            New-Item -ItemType Directory -Force -Path $prebuiltDir
-            
-            $urlX64 = "https://github.com/ayman708-UX/libtorrent_flutter/releases/download/v1.8.4/windows-native-lib-x64.zip"
-            $zipX64 = Join-Path $prebuiltDir "x64.zip"
-            Invoke-WebRequest -Uri $urlX64 -OutFile $zipX64
-            Expand-Archive -Path $zipX64 -DestinationPath $prebuiltDir -Force
-            Remove-Item $zipX64 -Force
-            Write-Host "Prebuilt Windows native binaries extracted successfully."
-          } else {
-            Write-Host "libtorrent_flutter package directory not found in pub cache."
-          }
+        run: pwsh scripts/setup_libtorrent_windows.ps1 -Arch x64
 
       - run: flutter build windows --release
 
@@ -106,6 +89,20 @@ jobs:
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
+      - name: Pre-extract libtorrent_flutter binaries in pub cache
+        run: |
+          PUB_CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
+          PKGS=$(find "$PUB_CACHE" -type d \( -name "libtorrent_flutter" -o -name "libtorrent_flutter-*" \) 2>/dev/null)
+          
+          curl -fSL "https://github.com/ayman708-UX/libtorrent_flutter/releases/download/v1.8.4/linux-native-lib-x64.zip" -o /tmp/linux-native-lib-x64.zip
+          for pkg in $PKGS; do
+            if [ -d "$pkg/linux" ]; then
+              mkdir -p "$pkg/prebuilt/linux"
+              unzip -o /tmp/linux-native-lib-x64.zip -d "$pkg/prebuilt/linux"
+              echo "Extracted Linux native lib into $pkg/prebuilt/linux"
+            fi
+          done
+          rm -f /tmp/linux-native-lib-x64.zip
       - run: flutter build linux --release
 
       - name: Test Launching Linux App

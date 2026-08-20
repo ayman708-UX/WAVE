@@ -68,6 +68,14 @@ dependencies:
   libtorrent_flutter:
     git:
       url: https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge.git
+      ref: main
+      path: packages/libtorrent_flutter
+
+dependency_overrides:
+  libtorrent_flutter:
+    git:
+      url: https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge.git
+      ref: main
       path: packages/libtorrent_flutter
 
 dev_dependencies:
