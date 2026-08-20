@@ -684,7 +684,7 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/libtorrent_flutter"
-      ref: HEAD
+      ref: main
       resolved-ref: c16cd43612541deabab33e75b4eff6645718d149
       url: "https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge.git"
     source: git

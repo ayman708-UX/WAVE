@@ -4,26 +4,21 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../core/utils/youtube_stream_http.dart';
-
-/// Robust YouTube audio stream resolver.
+/// 1-to-1 Port of NuvioTV InAppYouTubeExtractor for Audio Streams.
 ///
-/// Uses the InnerTube API directly (no HTML scraping) and cycles through a
-/// variety of clients that are known to return plain (non-ciphered) audio URLs
-/// for different networks/regions. Falls back gracefully when a video is
-/// age-restricted, geo-blocked, or when a client is rejected.
-///
-/// The extractor is intentionally self-contained and does not require a JS
-/// engine. Streams that require signature deciphering are skipped in favour of
-/// clients that already provide signed URLs.
+/// Features:
+/// 1. VisionOS (101), Android (3), and iOS (5) InnerTube clients.
+/// 2. Automatic watch page scraping for INNERTUBE_API_KEY and VISITOR_DATA.
+/// 3. 3-hour cache TTL with auto-invalidation on LOGIN_REQUIRED.
+/// 4. Precise candidate scoring (bitrate * 1e6 + audioSampleRate), non-nParam preference,
+///    container ranking (m4a > webm), and client priority hierarchy.
+/// 5. Multi-node CDN redundancy probing (parsing `mn` param to find the fastest reachable host).
 class YoutubeAudioExtractor {
   YoutubeAudioExtractor._();
   static final YoutubeAudioExtractor instance = YoutubeAudioExtractor._();
 
   static const String _tag = 'YoutubeAudioExtractor';
 
-  /// Fallback InnerTube API key. Extracted keys are preferred but this works
-  /// when the watch page cannot be fetched.
   static const String _fallbackApiKey =
       'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 
@@ -31,14 +26,16 @@ class YoutubeAudioExtractor {
   static const Duration _requestTimeout = Duration(seconds: 10);
   static const int _maxVideoCandidates = 2;
 
-  static const String _desktopUserAgent = YoutubeStreamHttp.desktopUserAgent;
+  static const String _defaultUserAgent =
+      'Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36';
 
-  // Search client context. WEB is the most reliable for InnerTube search.
+  // Search client context: WEB is most reliable for InnerTube search queries.
   static final _YtClient _searchClient = _YtClient(
     key: 'web_search',
     id: '1',
     version: '2.20250217.03.00',
-    userAgent: _desktopUserAgent,
+    userAgent: _defaultUserAgent,
     context: {
       'clientName': 'WEB',
       'clientVersion': '2.20250217.03.00',
@@ -46,65 +43,68 @@ class YoutubeAudioExtractor {
       'gl': 'US',
       'platform': 'DESKTOP',
     },
+    priority: 99,
   );
 
+  // 1-to-1 Match with NuvioTV CLIENTS hierarchy
   static final List<_YtClient> _clients = [
-    // iOS 20.10.4 client - returns plain audio URLs without signature cipher.
+    // 1. visionOS (Priority 0 - Highest, unthrottled, no cipher)
     _YtClient(
-      key: 'ios',
-      id: '5',
-      version: '20.10.4',
+      key: 'visionos',
+      id: '101',
+      version: '1.02',
       userAgent:
-          'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X;)',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 '
+          '(KHTML, like Gecko) Version/26.0 Safari/605.1.15',
       context: {
-        'clientName': 'IOS',
-        'clientVersion': '20.10.4',
+        'clientName': 'VISIONOS',
+        'clientVersion': '1.02',
         'deviceMake': 'Apple',
-        'deviceModel': 'iPhone16,2',
-        'userAgent':
-            'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X;)',
-        'platform': 'MOBILE',
-        'osName': 'IOS',
-        'osVersion': '18.1.0.22B83',
+        'deviceModel': 'RealityDevice17,1',
+        'osName': 'visionOS',
+        'osVersion': '26.5.23O471',
         'hl': 'en',
         'gl': 'US',
       },
+      priority: 0,
     ),
-    // Android 20.10.38 sdkless client.
+    // 2. Android (Priority 1)
     _YtClient(
       key: 'android',
       id: '3',
-      version: '20.10.38',
+      version: '20.10.35',
       userAgent:
-          'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
+          'com.google.android.youtube/20.10.35 (Linux; U; Android 14; en_US) gzip',
       context: {
         'clientName': 'ANDROID',
-        'clientVersion': '20.10.38',
-        'userAgent':
-            'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
-        'platform': 'MOBILE',
+        'clientVersion': '20.10.35',
         'osName': 'Android',
-        'osVersion': '11',
-        'hl': 'en',
-        'gl': 'US',
-      },
-    ),
-    // Mobile web fallback.
-    _YtClient(
-      key: 'mweb',
-      id: '2',
-      version: '2.20260817.01.00',
-      userAgent:
-          'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36',
-      context: {
-        'clientName': 'MWEB',
-        'clientVersion': '2.20260817.01.00',
-        'hl': 'en',
-        'gl': 'US',
+        'osVersion': '14',
         'platform': 'MOBILE',
+        'androidSdkVersion': 34,
+        'hl': 'en',
+        'gl': 'US',
       },
-      requiresVisitorData: true,
+      priority: 1,
+    ),
+    // 3. iOS (Priority 2)
+    _YtClient(
+      key: 'ios',
+      id: '5',
+      version: '20.10.1',
+      userAgent:
+          'com.google.ios.youtube/20.10.1 (iPhone16,2; U; CPU iOS 17_4 like Mac OS X)',
+      context: {
+        'clientName': 'IOS',
+        'clientVersion': '20.10.1',
+        'deviceModel': 'iPhone16,2',
+        'osName': 'iPhone',
+        'osVersion': '17.4.0.21E219',
+        'platform': 'MOBILE',
+        'hl': 'en',
+        'gl': 'US',
+      },
+      priority: 2,
     ),
   ];
 
@@ -115,16 +115,11 @@ class YoutubeAudioExtractor {
   final Map<String, _CachedVideoIds> _videoIdCache = {};
   final Map<String, _CachedStream> _streamCache = {};
 
-  _YtClient? _lastSuccessfulClient;
-
   // ===========================================================================
   // Public API
   // ===========================================================================
 
-  /// Search YouTube for [query] and return the best ranked videoId.
-  ///
-  /// Uses the InnerTube search API rather than scraping HTML, which is more
-  /// stable across regions and less likely to be blocked.
+  /// Search YouTube for [title] + [artist] and return the best ranked videoId.
   Future<String?> searchVideoId(
     String title,
     String artist, {
@@ -141,11 +136,6 @@ class YoutubeAudioExtractor {
   }
 
   /// Search YouTube and return ranked candidate videoIds.
-  ///
-  /// A single top result is not enough for reliable playback: some official
-  /// videos are age/region restricted, livestreams, or only expose ciphered
-  /// formats. The caller can try candidates in order until one yields a
-  /// playable audio URL.
   Future<List<String>> searchVideoIds(
     String title,
     String artist, {
@@ -167,8 +157,7 @@ class YoutubeAudioExtractor {
     } else if (queryLower.contains('acoustic')) {
       suffix = 'acoustic';
     } else {
-      suffix =
-          'official audio'; // keeps remixes/covers lower in results by default
+      suffix = 'official audio';
     }
 
     final searchQuery = '$queryTitle $artist $suffix'.trim();
@@ -195,7 +184,6 @@ class YoutubeAudioExtractor {
       return ids;
     } catch (e) {
       _log('searchVideoIds failed: $e');
-      // Try a fresh config once.
       if (!_isForced(config)) {
         _config = null;
         try {
@@ -220,11 +208,7 @@ class YoutubeAudioExtractor {
     }
   }
 
-  /// Resolve a plaintext audio URL for [videoId].
-  ///
-  /// Returns the highest-bitrate adaptive audio stream, falling back to a
-  /// progressive muxed stream if necessary. Only streams with a usable URL
-  /// (not a cipher requiring JS execution) are returned.
+  /// Resolve a plaintext audio URL for [videoId] using NuvioTV extraction logic.
   Future<({String url, String userAgent})?> getAudioUrl(
     String videoId, {
     bool verifyStream = true,
@@ -234,14 +218,24 @@ class YoutubeAudioExtractor {
       return (url: cached.url, userAgent: cached.userAgent);
     }
 
-    final config = await _ensureConfig();
-    return await _tryClients(
-      config,
-      videoId,
-      verifyStream: verifyStream,
-    );
+    var result = await _extractAudioInternal(videoId, forceRefreshConfig: false);
+    if (result == null) {
+      _log('First extraction attempt failed for $videoId, retrying with fresh config...');
+      result = await _extractAudioInternal(videoId, forceRefreshConfig: true);
+    }
+
+    if (result != null) {
+      _streamCache[videoId] = _CachedStream(
+        result.url,
+        _expiresAt(result.url),
+        result.userAgent,
+      );
+    }
+
+    return result;
   }
 
+  /// One-shot extraction helper: searches and resolves audio URL.
   Future<({String videoId, String audioUrl, String userAgent})?> extract(
     String title,
     String artist, {
@@ -275,7 +269,199 @@ class YoutubeAudioExtractor {
   }
 
   // ===========================================================================
-  // Internals
+  // 1-to-1 NuvioTV Audio Extraction Engine
+  // ===========================================================================
+
+  Future<({String url, String userAgent})?> _extractAudioInternal(
+    String videoId, {
+    required bool forceRefreshConfig,
+  }) async {
+    final config = await _ensureConfig(forceRefresh: forceRefreshConfig);
+    final candidates = <_NuvioAudioCandidate>[];
+    int loginRequiredCount = 0;
+
+    for (final client in _clients) {
+      try {
+        final player = await _fetchPlayer(config, videoId, client);
+        final playabilityStatus = _map(player['playabilityStatus']);
+        final status = _str(playabilityStatus, 'status');
+
+        if (status == 'LOGIN_REQUIRED') {
+          loginRequiredCount++;
+          _log('Client ${client.key}: LOGIN_REQUIRED');
+          continue;
+        }
+        if (status != null && status != 'OK') {
+          continue;
+        }
+
+        final streamingData = _map(player['streamingData']);
+        if (streamingData == null) continue;
+
+        final adaptiveFormats = _listOfMaps(streamingData['adaptiveFormats']);
+        for (final format in adaptiveFormats) {
+          final url = _usableUrl(format);
+          if (url == null || url.isEmpty) continue;
+          final mimeType = _str(format, 'mimeType')?.toLowerCase() ?? '';
+          if (!mimeType.contains('audio/')) continue;
+
+          final bitrate = (_num(format, 'bitrate') ?? _num(format, 'averageBitrate') ?? 0).toDouble();
+          final asr = double.tryParse(_str(format, 'audioSampleRate') ?? '') ?? 0.0;
+          final score = (bitrate * 1000000.0) + asr;
+          final hasN = _hasNParam(url);
+          final ext = mimeType.contains('webm') ? 'webm' : 'm4a';
+
+          candidates.add(_NuvioAudioCandidate(
+            clientKey: client.key,
+            clientPriority: client.priority,
+            userAgent: client.userAgent,
+            url: url,
+            score: score,
+            hasN: hasN,
+            itag: _str(format, 'itag') ?? '',
+            bitrate: bitrate,
+            ext: ext,
+          ));
+        }
+
+        // Also check progressive formats as secondary fallback
+        final formats = _listOfMaps(streamingData['formats']);
+        for (final format in formats) {
+          final url = _usableUrl(format);
+          if (url == null || url.isEmpty) continue;
+          final bitrate = (_num(format, 'bitrate') ?? _num(format, 'averageBitrate') ?? 0).toDouble();
+          final hasN = _hasNParam(url);
+
+          candidates.add(_NuvioAudioCandidate(
+            clientKey: client.key,
+            clientPriority: client.priority,
+            userAgent: client.userAgent,
+            url: url,
+            score: bitrate, // lower score than adaptive
+            hasN: hasN,
+            itag: _str(format, 'itag') ?? '',
+            bitrate: bitrate,
+            ext: 'mp4',
+          ));
+        }
+      } catch (e) {
+        _log('Client ${client.key} failed: $e');
+      }
+    }
+
+    if (loginRequiredCount == _clients.length) {
+      _log('All ${_clients.length} clients returned LOGIN_REQUIRED, invalidating config');
+      _config = null;
+      return null;
+    }
+
+    if (candidates.isEmpty) return null;
+
+    // NuvioTV Sort Hierarchy:
+    // 1. Higher score first
+    // 2. without 'n' param first
+    // 3. m4a over webm
+    // 4. client priority (visionos > android > ios)
+    candidates.sort((a, b) {
+      final s = b.score.compareTo(a.score);
+      if (s != 0) return s;
+      final n = (a.hasN ? 1 : 0).compareTo(b.hasN ? 1 : 0);
+      if (n != 0) return n;
+      final c = a.containerPreference.compareTo(b.containerPreference);
+      if (c != 0) return c;
+      return a.clientPriority.compareTo(b.clientPriority);
+    });
+
+    // Probing & CDN resolution
+    for (final best in candidates) {
+      final reachableUrl = await _resolveReachableUrl(best.url, userAgent: best.userAgent);
+      if (reachableUrl != null) {
+        _log('Resolved reachable audio URL (client=${best.clientKey}, itag=${best.itag}, ext=${best.ext})');
+        return (url: reachableUrl, userAgent: best.userAgent);
+      }
+    }
+
+    return null;
+  }
+
+  /// Probes CDN nodes for the given googlevideo URL and returns the first reachable one.
+  /// Generates alternate hosts based on YouTube's `mn` parameter.
+  Future<String?> _resolveReachableUrl(String url, {required String userAgent}) async {
+    if (!url.contains('googlevideo.com')) return url;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+
+    final mnParam = uri.queryParameters['mn'];
+    if (mnParam == null || mnParam.isEmpty) {
+      return await _isUrlReachable(url, userAgent: userAgent) ? url : null;
+    }
+
+    final servers = mnParam.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (servers.length < 2) {
+      return await _isUrlReachable(url, userAgent: userAgent) ? url : null;
+    }
+
+    final candidates = <String>[url];
+    for (int i = 0; i < servers.length; i++) {
+      final server = servers[i];
+      final currentHost = uri.host;
+      final altHost = currentHost
+          .replaceFirst(RegExp(r'^rr\d+---'), 'rr${i + 1}---')
+          .replaceFirst(RegExp(r'sn-[a-z0-9]+-[a-z0-9]+'), server);
+
+      if (altHost != currentHost) {
+        candidates.add(url.replaceFirst(currentHost, altHost));
+      }
+    }
+
+    if (candidates.length == 1) {
+      return await _isUrlReachable(candidates[0], userAgent: userAgent) ? candidates[0] : null;
+    }
+
+    final completer = Completer<String?>();
+    var completed = false;
+
+    for (final cand in candidates) {
+      _isUrlReachable(cand, userAgent: userAgent).then((reachable) {
+        if (reachable && !completed && !completer.isCompleted) {
+          completed = true;
+          completer.complete(cand);
+        }
+      });
+    }
+
+    return await completer.future.timeout(
+      const Duration(milliseconds: 2000),
+      onTimeout: () => _isUrlReachable(candidates.first, userAgent: userAgent).then((ok) => ok ? candidates.first : null),
+    );
+  }
+
+  Future<bool> _isUrlReachable(String url, {required String userAgent}) async {
+    try {
+      final res = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Range': 'bytes=0-0',
+          'User-Agent': userAgent,
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      ).timeout(const Duration(milliseconds: 1500));
+      return res.statusCode == 200 || res.statusCode == 206;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _hasNParam(String url) {
+    try {
+      return Uri.parse(url).queryParameters.containsKey('n');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // Config & InnerTube Requests
   // ===========================================================================
 
   Future<_CachedConfig> _ensureConfig({bool forceRefresh = false}) {
@@ -301,7 +487,7 @@ class YoutubeAudioExtractor {
           .get(
             Uri.parse('https://www.youtube.com/watch?v=dQw4w9WgXcQ&hl=en'),
             headers: {
-              'User-Agent': _desktopUserAgent,
+              'User-Agent': _defaultUserAgent,
               'Accept-Language': 'en-US,en;q=0.9',
               'Accept':
                   'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -332,7 +518,7 @@ class YoutubeAudioExtractor {
   String? _extractQuoted(String body, String key) {
     final idx = body.indexOf('"$key":"');
     if (idx == -1) return null;
-    final start = idx + key.length + 4; // skip "key":"
+    final start = idx + key.length + 4;
     final end = body.indexOf('"', start);
     if (end == -1) return null;
     return body.substring(start, end).replaceAll(r'\u0026', '&');
@@ -375,7 +561,6 @@ class YoutubeAudioExtractor {
       final videoId = _str(renderer, 'videoId');
       if (videoId == null || videoId.length != 11) continue;
 
-      // Skip live streams and very short clips.
       final isLive = (() {
         final badges = renderer['badges'];
         if (badges is List && badges.isNotEmpty) {
@@ -459,25 +644,22 @@ class YoutubeAudioExtractor {
         score += 30.0;
       }
 
-      // 3–6 + 8D: Unified variant / modifier matching
+      // 3. Variant matching
       final candVariants = _detectVariants(normCandTitle);
       final allVariants = <String>{...targetVariants, ...candVariants};
       for (final tag in allVariants) {
         if (targetVariants.contains(tag) == candVariants.contains(tag)) {
-          score += 15.0; // Both sides agree → small bonus
+          score += 15.0;
         } else {
-          score -=
-              _variantPenalties[tag] ??
-              350.0; // Weighted by how jarring the mismatch is
+          score -= _variantPenalties[tag] ?? 350.0;
         }
       }
 
-      // 7. Duration match (tiebreaker, never a trump card)
+      // 4. Duration match
       if (targetDuration != null && candDuration != null) {
-        final diffSecs = (candDuration.inSeconds - targetDuration.inSeconds)
-            .abs();
+        final diffSecs = (candDuration.inSeconds - targetDuration.inSeconds).abs();
         if (diffSecs <= 4) {
-          score += 80.0; // ↓ from 150 — duration is a hint, not a trump
+          score += 80.0;
         } else if (diffSecs <= 10) {
           score += 25.0;
         } else if (diffSecs <= 20) {
@@ -485,7 +667,7 @@ class YoutubeAudioExtractor {
         } else if (diffSecs <= 40) {
           score -= diffSecs * 2.0;
         } else {
-          score -= diffSecs * 5.0; // Proportional only — no flat -500 cliff
+          score -= diffSecs * 5.0;
         }
       }
 
@@ -564,86 +746,6 @@ class YoutubeAudioExtractor {
     return null;
   }
 
-  Future<({String url, String userAgent})?> _tryClients(
-    _CachedConfig config,
-    String videoId, {
-    required bool verifyStream,
-  }) async {
-    final clientsToTry = _clientsForRuntime();
-    if (_lastSuccessfulClient != null) {
-      clientsToTry.remove(_lastSuccessfulClient);
-      clientsToTry.insert(0, _lastSuccessfulClient!);
-    }
-
-    for (final client in clientsToTry) {
-      if (client.requiresVisitorData &&
-          (config.visitorData == null || config.visitorData!.isEmpty)) {
-        continue;
-      }
-      try {
-        final player = await _fetchPlayer(config, videoId, client);
-        final status = _str(_map(player['playabilityStatus']), 'status');
-        if (status == 'LOGIN_REQUIRED') {
-          _log('${client.key}: LOGIN_REQUIRED');
-          continue;
-        }
-        final reason = _str(_map(player['playabilityStatus']), 'reason');
-        if (reason != null && reason.toLowerCase().contains('age')) {
-          _log('${client.key}: age-restricted');
-          continue;
-        }
-
-        final streamingData = _map(player['streamingData']);
-        if (streamingData == null) continue;
-
-        final candidates = _audioCandidates(streamingData);
-        for (final best in candidates) {
-          if (best.isExpiredSoon) {
-            _log('${client.key}: skipped expired stream URL');
-            continue;
-          }
-          final playable = await YoutubeStreamHttp.probe(
-            best.url,
-            userAgent: client.userAgent,
-            timeout: const Duration(milliseconds: 1500),
-          );
-          if (!playable) {
-            _log('${client.key}: stream probe rejected ${best.label}');
-            continue;
-          }
-          _streamCache[videoId] = _CachedStream(
-            best.url,
-            best.expiresAt,
-            client.userAgent,
-          );
-          _lastSuccessfulClient = client;
-          return (url: best.url, userAgent: client.userAgent);
-        }
-      } catch (e) {
-        _log('${client.key} failed: $e');
-      }
-    }
-    return null;
-  }
-
-  List<_YtClient> _clientsForRuntime() {
-    const preferred = <String>[
-      'ios',
-      'android',
-      'mweb',
-    ];
-
-    final ordered = <_YtClient>[];
-    for (final key in preferred) {
-      final matches = _clients.where((client) => client.key == key);
-      ordered.addAll(matches);
-    }
-    for (final client in _clients) {
-      if (!ordered.contains(client)) ordered.add(client);
-    }
-    return ordered;
-  }
-
   Map<String, String> _commonHeaders(_CachedConfig config, _YtClient client) {
     return {
       'Content-Type': 'application/json',
@@ -669,7 +771,6 @@ class YoutubeAudioExtractor {
     );
 
     final headers = _commonHeaders(config, client);
-
     final context = <String, dynamic>{'client': client.context};
 
     final body = jsonEncode({
@@ -695,61 +796,6 @@ class YoutubeAudioExtractor {
     return <String, dynamic>{};
   }
 
-  List<_AudioCandidate> _audioCandidates(Map<String, dynamic> streamingData) {
-    final adaptive = _listOfMaps(streamingData['adaptiveFormats']);
-    final progressive = _listOfMaps(streamingData['formats']);
-
-    final candidates = <_AudioCandidate>[];
-    // Prefer adaptive audio-only streams (smaller, higher quality per byte).
-    for (final f in adaptive) {
-      final mime = _str(f, 'mimeType') ?? '';
-      if (!mime.contains('audio/')) continue;
-
-      final url = _usableUrl(f);
-      if (url == null || url.isEmpty) continue;
-
-      final bitrate = (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0)
-          .toDouble();
-      candidates.add(
-        _AudioCandidate(
-          url,
-          bitrate,
-          _expiresAt(url),
-          audioOnly: true,
-          label: 'itag ${_str(f, 'itag') ?? '?'} $mime',
-        ),
-      );
-    }
-
-    // Fallback: progressive (video+audio muxed) as a last resort.
-    for (final f in progressive) {
-      final url = _usableUrl(f);
-      if (url == null || url.isEmpty) continue;
-
-      final bitrate = (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0)
-          .toDouble();
-      final mime = _str(f, 'mimeType') ?? 'muxed';
-      candidates.add(
-        _AudioCandidate(
-          url,
-          bitrate,
-          _expiresAt(url),
-          audioOnly: false,
-          label: 'itag ${_str(f, 'itag') ?? '?'} $mime',
-        ),
-      );
-    }
-    candidates.sort((a, b) {
-      if (a.audioOnly != b.audioOnly) return a.audioOnly ? -1 : 1;
-      return b.bitrate.compareTo(a.bitrate);
-    });
-    return candidates;
-  }
-
-  /// Extracts a usable URL from a format map.
-  ///
-  /// If the format has a plain `url`, returns it. Cipher variants that need JS
-  /// execution are ignored because we don't ship a JS interpreter.
   String? _usableUrl(Map<String, dynamic> format) {
     final plain = _str(format, 'url');
     if (plain != null && plain.isNotEmpty) return plain;
@@ -761,8 +807,6 @@ class YoutubeAudioExtractor {
     final url = params['url'];
     if (url == null || url.isEmpty) return null;
 
-    // `s` is a ciphered signature, not a usable signature. Only accept direct
-    // signature fields that are already valid.
     final sig = params['sig'] ?? params['signature'];
     final sigParam = params['sp'] ?? 'sig';
     if (sig != null && sig.isNotEmpty) {
@@ -833,65 +877,36 @@ class YoutubeAudioExtractor {
     if (kDebugMode) debugPrint('[$_tag] $msg');
   }
 
-  /// Returns canonical variant tags for a pre-normalised title string
-  /// (lower-cased, non-[a-z0-9_\s] stripped — same form used for scoring).
   static Set<String> _detectVariants(String norm) {
     final tags = <String>{};
 
-    // 8D / Spatial audio (most jarring mismatch)
-    if (RegExp(
-      r'\b(8d|16d|spatial\saudio?|binaural|360|surround)\b',
-    ).hasMatch(norm)) {
+    if (RegExp(r'\b(8d|16d|spatial\saudio?|binaural|360|surround)\b').hasMatch(norm)) {
       tags.add('8d');
     }
-
-    // Slowed / Reverb
     if (RegExp(r'\b(slowed|reverb)\b').hasMatch(norm)) {
       tags.add('slowed_reverb');
     }
-
-    // Nightcore / Sped-up
     if (RegExp(r'\b(nightcore|sped[\s]?up)\b').hasMatch(norm)) {
       tags.add('nightcore');
     }
-
-    // Lo-fi
     if (RegExp(r'\blo[\s]?fi\b').hasMatch(norm)) {
       tags.add('lofi');
     }
-
-    // Instrumental / Karaoke
-    if (RegExp(
-      r'\b(instrumental|karaoke|no\svo[ck]als?|backing\strack)\b',
-    ).hasMatch(norm)) {
+    if (RegExp(r'\b(instrumental|karaoke|no\svo[ck]als?|backing\strack)\b').hasMatch(norm)) {
       tags.add('instrumental');
     }
-
-    // Remix / Mashup / Bootleg
-    if (RegExp(
-      r'\b(remix|mashup|bootleg|flip|vip\smix|reedit)\b',
-    ).hasMatch(norm)) {
+    if (RegExp(r'\b(remix|mashup|bootleg|flip|vip\smix|reedit)\b').hasMatch(norm)) {
       tags.add('remix');
     }
-
-    // Live
-    if (RegExp(
-      r'\b(live\b|in\sconcert|live\sat|live\sfrom)\b',
-    ).hasMatch(norm)) {
+    if (RegExp(r'\b(live\b|in\sconcert|live\sat|live\sfrom)\b').hasMatch(norm)) {
       tags.add('live');
     }
-
-    // Acoustic / Unplugged
     if (RegExp(r'\b(acoustic|unplugged)\b').hasMatch(norm)) {
       tags.add('acoustic');
     }
-
-    // Cover
     if (RegExp(r'\bcover\b').hasMatch(norm)) {
       tags.add('cover');
     }
-
-    // Extended mix
     if (RegExp(r'\b(extended\s(mix|version)|full\sversion)\b').hasMatch(norm)) {
       tags.add('extended');
     }
@@ -899,7 +914,6 @@ class YoutubeAudioExtractor {
     return tags;
   }
 
-  // Penalty weights — higher = more jarring if wrong
   static const Map<String, double> _variantPenalties = {
     '8d': 700.0,
     'slowed_reverb': 600.0,
@@ -922,7 +936,7 @@ class _YtClient {
   final String version;
   final String userAgent;
   final Map<String, Object> context;
-  final bool requiresVisitorData;
+  final int priority;
 
   _YtClient({
     required this.key,
@@ -930,8 +944,44 @@ class _YtClient {
     required this.version,
     required this.userAgent,
     required this.context,
-    this.requiresVisitorData = false,
+    required this.priority,
   });
+}
+
+class _NuvioAudioCandidate {
+  final String clientKey;
+  final int clientPriority;
+  final String userAgent;
+  final String url;
+  final double score;
+  final bool hasN;
+  final String itag;
+  final double bitrate;
+  final String ext;
+
+  _NuvioAudioCandidate({
+    required this.clientKey,
+    required this.clientPriority,
+    required this.userAgent,
+    required this.url,
+    required this.score,
+    required this.hasN,
+    required this.itag,
+    required this.bitrate,
+    required this.ext,
+  });
+
+  int get containerPreference {
+    switch (ext.toLowerCase()) {
+      case 'm4a':
+      case 'mp4':
+        return 0;
+      case 'webm':
+        return 1;
+      default:
+        return 2;
+    }
+  }
 }
 
 class _CachedConfig {
@@ -974,32 +1024,9 @@ class _CachedStream {
   bool get isExpired {
     final exp = expiresAt;
     if (exp != null) {
-      // Expire 60s early to avoid racing the CDN.
       return DateTime.now().isAfter(exp.subtract(const Duration(seconds: 60)));
     }
     return DateTime.now().difference(cachedAt) >= const Duration(hours: 4);
-  }
-}
-
-class _AudioCandidate {
-  final String url;
-  final double bitrate;
-  final DateTime? expiresAt;
-  final bool audioOnly;
-  final String label;
-
-  _AudioCandidate(
-    this.url,
-    this.bitrate,
-    this.expiresAt, {
-    required this.audioOnly,
-    required this.label,
-  });
-
-  bool get isExpiredSoon {
-    final exp = expiresAt;
-    if (exp == null) return false;
-    return DateTime.now().isAfter(exp.subtract(const Duration(minutes: 2)));
   }
 }
 

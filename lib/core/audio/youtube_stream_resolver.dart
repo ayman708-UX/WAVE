@@ -60,7 +60,15 @@ class YoutubeStreamResolver {
       return null;
     }
 
-    // 2. Convertytmp3 Primary Stream Resolution (Fastest & 100% reliable)
+    // 2. Fast direct extractor (1-to-1 NuvioTV InAppYouTubeExtractor port)
+    final fast = await resolveFastUrlOnly(
+      track,
+      timeout: const Duration(seconds: 4),
+      verifyStream: true,
+    );
+    if (fast != null) return fast;
+
+    // 3. Convertytmp3 Stream Resolution Fallback
     VideoId? vidId = _cache[track.id];
     if (vidId == null) {
       final savedId = _cachedVideoIdFor(track.id);
@@ -95,14 +103,6 @@ class YoutubeStreamResolver {
         appLogger.w('Convertytmp3 resolution failed: $e');
       }
     }
-
-    // 3. Fast direct extractor fallback (with mandatory probe)
-    final fast = await resolveFastUrlOnly(
-      track,
-      timeout: const Duration(seconds: 4),
-      verifyStream: true,
-    );
-    if (fast != null) return fast;
 
     // 4. Conservative fallback: youtube_explode_dart (as last resort)
     if (allowExplodeFallback) {
@@ -210,24 +210,7 @@ class YoutubeStreamResolver {
     required bool verifyStream,
     required Duration timeout,
   }) async {
-    // 1. Convertytmp3 (Fastest & 100% reliable)
-    try {
-      final streamUrl = await Convertytmp3Client.getStreamUrl(videoId.value);
-      if (streamUrl != null) {
-        _cache[track.id] = videoId;
-        if (saveMatch) await _saveVideoIdFor(track.id, videoId);
-        appLogger.i('Resolved videoId $videoId via Convertytmp3Client');
-        return (
-          url: streamUrl,
-          userAgent:
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-        );
-      }
-    } catch (e) {
-      appLogger.w('Convertytmp3 direct videoId resolve failed for $videoId: $e');
-    }
-
-    // 2. Direct extractor fallback (with stream probe)
+    // 1. Direct extractor (1-to-1 NuvioTV InAppYouTubeExtractor port)
     try {
       final res = await YoutubeRateLimitGuard.runLowRequest(
         () => YoutubeAudioExtractor.instance.getAudioUrl(
@@ -243,6 +226,23 @@ class YoutubeStreamResolver {
     } catch (e) {
       if (YoutubeRateLimitGuard.isRateLimitError(e)) _handleRateLimit(e);
       appLogger.w('Fast video id playback resolve failed for $videoId: $e');
+    }
+
+    // 2. Convertytmp3 fallback
+    try {
+      final streamUrl = await Convertytmp3Client.getStreamUrl(videoId.value);
+      if (streamUrl != null) {
+        _cache[track.id] = videoId;
+        if (saveMatch) await _saveVideoIdFor(track.id, videoId);
+        appLogger.i('Resolved videoId $videoId via Convertytmp3Client');
+        return (
+          url: streamUrl,
+          userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        );
+      }
+    } catch (e) {
+      appLogger.w('Convertytmp3 direct videoId resolve failed for $videoId: $e');
     }
 
     return null;
