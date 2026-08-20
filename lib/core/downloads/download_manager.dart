@@ -15,7 +15,7 @@ import '../audio/youtube_stream_resolver.dart';
 import '../audio/youtube_rate_limit_guard.dart';
 import '../storage/hive_boxes.dart';
 import '../storage/settings_providers.dart';
-import '../api/octave_music_service.dart';
+import '../api/qobuz_music_service.dart';
 import '../utils/app_logger.dart';
 import '../utils/youtube_stream_http.dart';
 import 'local_download_matcher.dart';
@@ -888,10 +888,10 @@ class DownloadManager {
       }
 
       if (settings.audioQuality == AudioQuality.lossless) {
-        final octaveRes = await OctaveMusicService.instance.resolveLosslessUrl(track);
-        if (octaveRes != null) {
-          url = octaveRes.url;
-          customHeaders = octaveRes.headers;
+        final qobuzRes = await QobuzMusicService.instance.resolveLosslessUrl(track);
+        if (qobuzRes != null) {
+          url = qobuzRes.url;
+          customHeaders = qobuzRes.headers;
         }
       }
 

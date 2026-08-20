@@ -683,11 +683,12 @@ packages:
   libtorrent_flutter:
     dependency: "direct main"
     description:
-      name: libtorrent_flutter
-      sha256: fd954704312c6990294e7bcb40ed5bcf6c9edf8976a547649de32100e0523199
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.0"
+      path: "packages/libtorrent_flutter"
+      ref: HEAD
+      resolved-ref: c16cd43612541deabab33e75b4eff6645718d149
+      url: "https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge.git"
+    source: git
+    version: "1.8.5"
   lints:
     dependency: transitive
     description:

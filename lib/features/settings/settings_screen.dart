@@ -1040,7 +1040,7 @@ class _AudioQualityCard extends ConsumerWidget {
               Expanded(
                 child: _QualityOptionTile(
                   title: 'Lossless',
-                  subtitle: 'FLAC via Octave',
+                  subtitle: 'FLAC via Qobuz',
                   icon: PhosphorIconsRegular.sparkle,
                   isSelected: currentQuality == AudioQuality.lossless,
                   onTap: () {

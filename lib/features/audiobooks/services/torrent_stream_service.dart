@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 enum EngineState { stopped, starting, ready, error }
 
@@ -34,17 +31,27 @@ class TorrentStreamService {
 
     _state = EngineState.starting;
     try {
-      final docDir = await getApplicationDocumentsDirectory();
-      final downloadsDir = Directory('${docDir.path}/torrent_downloads');
-      if (!downloadsDir.existsSync()) {
-        downloadsDir.createSync(recursive: true);
-      }
-
       await LibtorrentFlutter.init(
-        defaultSavePath: downloadsDir.path,
         fetchTrackers: true,
-        pollInterval: const Duration(seconds: 1),
+        pollInterval: const Duration(milliseconds: 200),
       );
+
+      try {
+        final engine = LibtorrentFlutter.instance;
+        const connLimit = 200;
+        engine.configureSession(
+          engine.getDefaultConfig().copyWith(
+            connectionsLimit: connLimit,
+            forceEncrypt: false,
+            disableDht: false,
+            downloadRateLimit: 0,
+            uploadRateLimit: 0,
+          ),
+        );
+        debugPrint('[TorrentStream] Session configured: conns=$connLimit');
+      } catch (e) {
+        debugPrint('[TorrentStream] configureSession failed (non-fatal): $e');
+      }
 
       _torrentUpdatesSub = LibtorrentFlutter.instance.torrentUpdates.listen((updates) {
         _latestUpdates.addAll(updates);
@@ -248,11 +255,18 @@ class TorrentStreamService {
             maxCacheBytes: maxCacheBytes,
           );
           byFile[streamIdx] = streamInfo.id;
+
+          try {
+            LibtorrentFlutter.instance.preloadStream(streamInfo.id);
+          } catch (e) {
+            debugPrint('[TorrentStream] preloadStream error: $e');
+          }
+
           var streamUrl = streamInfo.url;
           try {
             // Give MPV a format hint via the URL path
             final ext = (fi as dynamic).path ?? (fi as dynamic).name ?? 'audio.mp3';
-            streamUrl += '/' + Uri.encodeComponent(ext.split('/').last);
+            streamUrl = '$streamUrl/${Uri.encodeComponent(ext.split('/').last)}';
           } catch (_) {}
           _audiobookStreamUrls.putIfAbsent(key, () => {})[streamIdx] = streamUrl;
           return streamUrl;
@@ -288,5 +302,26 @@ class TorrentStreamService {
       _activeTorrents.remove(key);
       _latestUpdates.remove(torrentId);
     }
+  }
+
+  Future<void> stop() async {
+    for (final byFile in _audiobookStreamsByFile.values) {
+      for (final streamId in byFile.values) {
+        _safeStopStream(streamId);
+      }
+    }
+    _audiobookStreamsByFile.clear();
+    _audiobookStreamUrls.clear();
+
+    for (final torrentId in _activeTorrents.values) {
+      _safeDisposeTorrent(torrentId);
+    }
+    _activeTorrents.clear();
+    _latestUpdates.clear();
+    _disposedTorrentIds.clear();
+    _disposedStreamIds.clear();
+    _torrentUpdatesSub?.cancel();
+    _torrentUpdatesSub = null;
+    _state = EngineState.stopped;
   }
 }
