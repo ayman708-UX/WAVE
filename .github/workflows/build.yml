@@ -39,7 +39,11 @@ jobs:
         shell: pwsh
         run: pwsh scripts/setup_libtorrent_windows.ps1 -Arch x64
 
-      - run: flutter build windows --release
+      - run: flutter build windows --release --dart-define-from-file=.env
+
+      - name: Clean up .env before packaging
+        shell: pwsh
+        run: Remove-Item .env -Force -ErrorAction SilentlyContinue
 
       - name: Install Inno Setup
         shell: pwsh
@@ -103,7 +107,9 @@ jobs:
             fi
           done
           rm -f /tmp/linux-native-lib-x64.zip
-      - run: flutter build linux --release
+      - run: flutter build linux --release --dart-define-from-file=.env
+      - name: Clean up .env before packaging
+        run: rm -f .env
 
       - name: Test Launching Linux App
         run: |
@@ -172,7 +178,9 @@ jobs:
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
-      - run: flutter build macos --release
+      - run: flutter build macos --release --dart-define-from-file=.env
+      - name: Clean up .env before packaging
+        run: rm -f .env
 
       - name: Test Launching macOS App
         run: |
@@ -227,7 +235,9 @@ jobs:
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: arch -x86_64 flutter pub get
-      - run: arch -x86_64 flutter build macos --release
+      - run: arch -x86_64 flutter build macos --release --dart-define-from-file=.env
+      - name: Clean up .env before packaging
+        run: rm -f .env
 
       - name: Test Launching macOS Intel App
         run: |
@@ -278,7 +288,9 @@ jobs:
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - run: flutter build ios --release --no-codesign --dart-define-from-file=.env
+      - name: Clean up .env before packaging
+        run: rm -f .env
 
       - name: Package as IPA
         run: |

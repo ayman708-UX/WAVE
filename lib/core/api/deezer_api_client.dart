@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../config/app_config.dart';
 import '../utils/app_logger.dart';
 import 'models/deezer_album.dart';
 import 'models/deezer_artist.dart';
@@ -15,27 +15,14 @@ import 'models/deezer_user.dart';
 /// All methods accept an optional [CancelToken] so callers can cancel the
 /// request when their widget disposes.
 class DeezerApiClient {
-  static String? proxyUrl;
+  static String? get proxyUrl =>
+      AppConfig.deezerProxyUrl.isNotEmpty ? AppConfig.deezerProxyUrl : null;
   static bool useProxy = false;
 
   static Future<void> loadEnv() async {
-    try {
-      final content = await rootBundle.loadString('.env');
-      for (final line in content.split('\n')) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-        final parts = trimmed.split('=');
-        if (parts.length >= 2) {
-          final key = parts[0].trim();
-          final value = parts.sublist(1).join('=').trim();
-          if (key == 'DEEZER_PROXY_URL') {
-            proxyUrl = value;
-            appLogger.i('Loaded DEEZER_PROXY_URL: $proxyUrl');
-          }
-        }
-      }
-    } catch (e) {
-      appLogger.w('Could not load .env file: $e');
+    await AppConfig.init();
+    if (proxyUrl != null) {
+      appLogger.i('Loaded DEEZER_PROXY_URL: $proxyUrl');
     }
   }
 

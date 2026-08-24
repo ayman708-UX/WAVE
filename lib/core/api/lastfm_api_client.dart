@@ -1,32 +1,18 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
+import '../config/app_config.dart';
 import '../utils/app_logger.dart';
 
 class LastfmApiClient {
-  static String? apiKey;
-  static String? sharedSecret;
+  static String? get apiKey =>
+      AppConfig.lastfmApiKey.isNotEmpty ? AppConfig.lastfmApiKey : null;
+  static String? get sharedSecret =>
+      AppConfig.lastfmSharedSecret.isNotEmpty ? AppConfig.lastfmSharedSecret : null;
 
   static Future<void> loadEnv() async {
-    try {
-      final content = await rootBundle.loadString('.env');
-      for (final line in content.split('\n')) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-        final parts = trimmed.split('=');
-        if (parts.length >= 2) {
-          final key = parts[0].trim();
-          final value = parts.sublist(1).join('=').trim();
-          if (key == 'LASTFM_API_KEY') {
-            apiKey = value;
-            appLogger.i('Loaded LASTFM_API_KEY');
-          } else if (key == 'LASTFM_SHARED_SECRET') {
-            sharedSecret = value;
-          }
-        }
-      }
-    } catch (e) {
-      appLogger.w('Could not load .env file for Last.fm: $e');
+    await AppConfig.init();
+    if (apiKey != null) {
+      appLogger.i('Loaded LASTFM_API_KEY');
     }
   }
 
@@ -61,21 +47,23 @@ class LastfmApiClient {
         },
       );
 
-      final data = res.data;
-      if (data != null &&
-          data['similartracks'] != null &&
-          data['similartracks']['track'] is List) {
-        final tracks = data['similartracks']['track'] as List;
-        return tracks.map((t) {
-          return {
-            'name': t['name']?.toString() ?? '',
-            'artist': t['artist']?['name']?.toString() ?? '',
-          };
-        }).toList();
-      }
+      final trackList =
+          res.data?['similartracks']?['track'] as List<dynamic>?;
+      if (trackList == null) return [];
+
+      return trackList.map<Map<String, String>>((t) {
+        final tMap = t as Map<String, dynamic>;
+        final artistName =
+            (tMap['artist'] is Map)
+                ? (tMap['artist'] as Map<String, dynamic>)['name']?.toString() ??
+                    ''
+                : tMap['artist']?.toString() ?? '';
+        final trackName = tMap['name']?.toString() ?? '';
+        return {'title': trackName, 'artist': artistName};
+      }).toList();
     } catch (e) {
       appLogger.e('Failed to fetch similar tracks from Last.fm: $e');
+      return [];
     }
-    return [];
   }
 }

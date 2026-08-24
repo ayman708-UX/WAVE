@@ -1,34 +1,28 @@
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/app_config.dart';
 import '../utils/app_logger.dart';
 
 class SupabaseApiClient {
-  static String? supabaseUrl;
-  static String? supabaseAnonKey;
+  static String? get supabaseUrl =>
+      AppConfig.supabaseUrl.isNotEmpty ? AppConfig.supabaseUrl : null;
+  static String? get supabaseAnonKey =>
+      AppConfig.supabaseAnonKey.isNotEmpty ? AppConfig.supabaseAnonKey : null;
 
   static Future<void> loadEnvAndInit() async {
+    await AppConfig.init();
+
+    final url = supabaseUrl;
+    final anonKey = supabaseAnonKey;
+
+    if (url == null || anonKey == null || url.isEmpty || anonKey.isEmpty) {
+      appLogger.w('Supabase credentials missing from environment (SUPABASE_URL / SUPABASE_ANON_KEY)');
+      return;
+    }
+
     try {
-      final content = await rootBundle.loadString('.env');
-      final lines = content.split('\n');
-      for (final line in lines) {
-        if (line.trim().isEmpty || line.startsWith('#')) continue;
-        final parts = line.split('=');
-        if (parts.length >= 2) {
-          final key = parts[0].trim();
-          final value = parts.sublist(1).join('=').trim();
-          if (key == 'SUPABASE_URL') supabaseUrl = value;
-          if (key == 'SUPABASE_ANON_KEY') supabaseAnonKey = value;
-        }
-      }
-
-      if (supabaseUrl == null || supabaseAnonKey == null) {
-        appLogger.e('Supabase credentials missing from .env');
-        return;
-      }
-
       await Supabase.initialize(
-        url: supabaseUrl!,
-        publishableKey: supabaseAnonKey!,
+        url: url,
+        publishableKey: anonKey,
       );
 
       appLogger.i('Supabase initialized successfully');
